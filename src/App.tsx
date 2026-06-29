@@ -1950,6 +1950,46 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
+  // Validasi ulang satu baris preview (status & alasan) berdasarkan kelengkapan & duplikat.
+  const revalidatePreviewRow = (row: any, allRows: any[]): { status: string; reason: string } => {
+    const name = (row.name || '').trim();
+    const passport = (row.passport || '').trim().toUpperCase();
+    const visa = (row.visa || '').trim();
+    if (!name || !passport || !visa) {
+      return { status: 'Tidak Lengkap', reason: !name ? 'Nama kosong' : !passport ? 'Paspor kosong' : 'Visa kosong' };
+    }
+    const dupInState = jamaahs.some(j => j.passport === passport || (visa && j.visa === visa));
+    const dupInPreview = allRows.some(p => p !== row && ((p.passport || '').trim().toUpperCase() === passport || (visa && (p.visa || '').trim() === visa)));
+    if (dupInState || dupInPreview) {
+      return { status: 'Duplikat', reason: 'Nomor Paspor/Visa sudah terdaftar di sistem' };
+    }
+    return { status: 'Valid', reason: 'Siap di-import' };
+  };
+
+  // Edit satu sel pada baris preview sebelum import; status & alasan dihitung ulang.
+  // Statistik diperbarui otomatis via useEffect di bawah.
+  const updatePreviewRow = (targetRow: any, field: string, value: string) => {
+    setPreviewRows(prev => {
+      const editedIdx = prev.indexOf(targetRow);
+      const next = prev.map(r => (r === targetRow ? { ...r, [field]: value } : r));
+      if (editedIdx !== -1) {
+        const { status, reason } = revalidatePreviewRow(next[editedIdx], next);
+        next[editedIdx] = { ...next[editedIdx], status, reason };
+      }
+      return next;
+    });
+  };
+
+  // Jaga statistik import (total/valid/duplikat/tidak lengkap) selalu sinkron dgn previewRows.
+  useEffect(() => {
+    setImportStats({
+      total: previewRows.length,
+      valid: previewRows.filter(r => r.status === 'Valid').length,
+      duplicate: previewRows.filter(r => r.status === 'Duplikat').length,
+      incomplete: previewRows.filter(r => r.status === 'Tidak Lengkap').length,
+    });
+  }, [previewRows]);
+
   const executeImport = (specificTravel?: string) => {
     const allowedStatuses = importDuplicateAction === 'overwrite' ? ['Valid', 'Duplikat'] : ['Valid'];
     const rowsToImport = previewRows.filter(r => allowedStatuses.includes(r.status) && (!specificTravel || r.travel === specificTravel));
@@ -4465,17 +4505,38 @@ export default function App() {
                               <tbody className="divide-y divide-slate-100 dark:divide-zinc-700">
                                 {rows.map((r, idx) => (
                                   <tr key={idx} className="hover:bg-slate-50 dark:bg-zinc-800/50 dark:hover:bg-zinc-700/30">
-                                    <td className="py-2.5 px-4 font-medium text-slate-800 dark:text-zinc-100">{r.name || <span className="text-red-500 italic">[Kosong]</span>}</td>
-                                    <td className="py-2.5 px-3 text-slate-600 dark:text-zinc-300">{r.email || <span className="text-slate-300 italic">-</span>}</td>
-                                    <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-zinc-300">{r.passport || <span className="text-red-500 italic">[Kosong]</span>}</td>
-                                    <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-zinc-300">{r.visa}</td>
-                                    <td className="py-2.5 px-3">
-                                      <span className="font-mono text-[10px] bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-zinc-200 px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-600">
-                                        {r.password || <span className="text-slate-400 italic">Otomatis</span>}
-                                      </span>
+                                    <td className="py-1.5 px-2 font-medium text-slate-800 dark:text-zinc-100">
+                                      <input value={r.name || ''} onChange={(e) => updatePreviewRow(r, 'name', e.target.value)} placeholder="[Kosong]"
+                                        className="w-full min-w-[140px] bg-transparent border border-transparent hover:border-slate-200 dark:hover:border-zinc-600 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-900 rounded px-1.5 py-1 outline-none transition-colors placeholder:text-red-400 placeholder:italic" />
                                     </td>
-                                    <td className="py-2.5 px-3 text-slate-500 dark:text-zinc-400">{r.gender}</td>
-                                    <td className="py-2.5 px-3 font-mono text-slate-500 dark:text-zinc-400">{r.entryMadinah}</td>
+                                    <td className="py-1.5 px-2 text-slate-600 dark:text-zinc-300">
+                                      <input value={r.email || ''} onChange={(e) => updatePreviewRow(r, 'email', e.target.value)} placeholder="-"
+                                        className="w-full min-w-[160px] bg-transparent border border-transparent hover:border-slate-200 dark:hover:border-zinc-600 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-900 rounded px-1.5 py-1 outline-none transition-colors" />
+                                    </td>
+                                    <td className="py-1.5 px-2 font-mono text-slate-600 dark:text-zinc-300">
+                                      <input value={r.passport || ''} onChange={(e) => updatePreviewRow(r, 'passport', e.target.value.toUpperCase())} placeholder="[Kosong]"
+                                        className="w-full min-w-[110px] bg-transparent border border-transparent hover:border-slate-200 dark:hover:border-zinc-600 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-900 rounded px-1.5 py-1 outline-none transition-colors placeholder:text-red-400 placeholder:italic" />
+                                    </td>
+                                    <td className="py-1.5 px-2 font-mono text-slate-600 dark:text-zinc-300">
+                                      <input value={r.visa || ''} onChange={(e) => updatePreviewRow(r, 'visa', e.target.value)} placeholder="-"
+                                        className="w-full min-w-[110px] bg-transparent border border-transparent hover:border-slate-200 dark:hover:border-zinc-600 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-900 rounded px-1.5 py-1 outline-none transition-colors" />
+                                    </td>
+                                    <td className="py-1.5 px-2">
+                                      <input value={r.password || ''} onChange={(e) => updatePreviewRow(r, 'password', e.target.value)} placeholder="Otomatis"
+                                        className="w-full min-w-[90px] font-mono text-[11px] bg-transparent border border-transparent hover:border-slate-200 dark:hover:border-zinc-600 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-900 rounded px-1.5 py-1 outline-none transition-colors placeholder:text-slate-400 placeholder:italic" />
+                                    </td>
+                                    <td className="py-1.5 px-2 text-slate-500 dark:text-zinc-400">
+                                      <select value={r.gender || ''} onChange={(e) => updatePreviewRow(r, 'gender', e.target.value)}
+                                        className="w-full min-w-[90px] bg-transparent border border-transparent hover:border-slate-200 dark:hover:border-zinc-600 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-900 rounded px-1 py-1 outline-none transition-colors cursor-pointer">
+                                        <option value="">—</option>
+                                        <option value="Laki-laki">Laki-laki</option>
+                                        <option value="Perempuan">Perempuan</option>
+                                      </select>
+                                    </td>
+                                    <td className="py-1.5 px-2 font-mono text-slate-500 dark:text-zinc-400">
+                                      <input type="date" value={(r.entryMadinah || '').split('T')[0]} onChange={(e) => updatePreviewRow(r, 'entryMadinah', e.target.value)}
+                                        className="w-full min-w-[130px] bg-transparent border border-transparent hover:border-slate-200 dark:hover:border-zinc-600 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-900 rounded px-1.5 py-1 outline-none transition-colors" />
+                                    </td>
                                     {customFields.map(cf => {
                                       const cVal = r.customValues?.[cf.id] || '-';
                                       return (
