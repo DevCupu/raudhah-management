@@ -1970,19 +1970,29 @@ export default function App() {
           const passport = String(r[colPassportIdx] || '').trim().toUpperCase();
           const visa = String(r[colVisaIdx] || '').trim();
           
-          let genderVal = String(r[colGenderIdx] || '').trim().toLowerCase();
-          let gender: Gender = 'Laki-laki';
-          if (
-            genderVal.startsWith('p') || 
-            genderVal.includes('perempuan') || 
-            genderVal === 'f' || 
-            genderVal === 'female' || 
-            genderVal.includes('wanita') || 
-            genderVal === 'w'
-          ) {
-            gender = 'Perempuan';
-          } else {
-            gender = 'Laki-laki';
+          const genderVal = String(r[colGenderIdx] || '').trim().toLowerCase();
+          // Gender DIKOSONGKAN jika tidak ada datanya / tidak dikenali (diisi manual oleh user).
+          let gender: Gender | '' = '';
+          if (genderVal) {
+            if (
+              genderVal.startsWith('p') ||
+              genderVal.includes('perempuan') ||
+              genderVal === 'f' ||
+              genderVal === 'female' ||
+              genderVal.includes('wanita') ||
+              genderVal === 'w'
+            ) {
+              gender = 'Perempuan';
+            } else if (
+              genderVal.startsWith('l') ||
+              genderVal.includes('laki') ||
+              genderVal === 'm' ||
+              genderVal === 'male' ||
+              genderVal === 'pria'
+            ) {
+              gender = 'Laki-laki';
+            }
+            // selain itu: tetap '' (tidak dikenali)
           }
 
           const phone = String(r[colPhoneIdx] || '').trim();
@@ -2004,9 +2014,9 @@ export default function App() {
             exitMadinah = cleanStringDateOnly(exitMadinah);
           }
 
-          // Clean up or fallback
-          if (!entryMadinah || entryMadinah === 'undefined') entryMadinah = '2026-06-27';
-          if (!exitMadinah || exitMadinah === 'undefined') exitMadinah = '2026-07-02';
+          // Tanggal DIKOSONGKAN jika tidak ada datanya (diisi manual oleh user).
+          if (entryMadinah === 'undefined') entryMadinah = '';
+          if (exitMadinah === 'undefined') exitMadinah = '';
 
           // Read Travel column. If empty or missing, fallback to Raudhah Al-Haramain Travel
           let travel = 'Raudhah Al-Haramain Travel';
@@ -2014,10 +2024,15 @@ export default function App() {
             travel = String(r[colTravelIdx]).trim();
           }
 
-          // Read Email column.
+          // Read Email column. Jika kosong, BUAT OTOMATIS dari nama:
+          // huruf kecil semua, tanpa spasi/simbol, + @mailnesia.com
           let email = '';
           if (colEmailIdx !== -1 && r[colEmailIdx]) {
             email = String(r[colEmailIdx]).trim();
+          }
+          if (!email && name) {
+            const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (slug) email = `${slug}@mailnesia.com`;
           }
 
           // Read Password column
@@ -2106,7 +2121,7 @@ export default function App() {
           name: r.name,
           passport: r.passport.toUpperCase(),
           visa: r.visa,
-          gender: r.gender as Gender,
+          gender: r.gender,
           phone: r.phone || '-',
           email: r.email || '',
           entryMadinah: r.entryMadinah,
@@ -2148,7 +2163,7 @@ export default function App() {
         name: r.name,
         passport: r.passport.toUpperCase(),
         visa: r.visa,
-        gender: r.gender as Gender,
+        gender: r.gender,
         phone: r.phone || '-',
         email: r.email || '',
         entryMadinah: r.entryMadinah,
@@ -4205,13 +4220,15 @@ export default function App() {
                                           <td className="py-2.5 px-2">
                                             <div className="font-semibold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5 truncate text-xs">
                                                <span className="truncate">{j.name}</span>
-                                               <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border shrink-0 leading-none ${
-                                                 j.gender === 'Perempuan'
-                                                   ? 'bg-pink-50 dark:bg-pink-500/15 text-pink-700 dark:text-pink-300 border-pink-200 dark:border-pink-500/30'
-                                                   : 'bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30'
-                                               }`}>
-                                                  {j.gender === 'Perempuan' ? '♀ Perempuan' : '♂ Laki-laki'}
-                                               </span>
+                                               {j.gender && (
+                                                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border shrink-0 leading-none ${
+                                                   j.gender === 'Perempuan'
+                                                     ? 'bg-pink-50 dark:bg-pink-500/15 text-pink-700 dark:text-pink-300 border-pink-200 dark:border-pink-500/30'
+                                                     : 'bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30'
+                                                 }`}>
+                                                    {j.gender === 'Perempuan' ? '♀ Perempuan' : '♂ Laki-laki'}
+                                                 </span>
+                                               )}
                                                {isUrgent && (
                                                  <span className="text-[8px] text-rose-800 dark:text-rose-300 bg-rose-100 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/25 px-1.5 py-0.5 rounded font-bold animate-pulse flex items-center gap-0.5 shrink-0 leading-none">
                                                    <AlertTriangle className="w-2.5 h-2.5 text-rose-600 shrink-0" />
@@ -6414,9 +6431,10 @@ export default function App() {
                   <label className="text-xs font-semibold text-slate-600 dark:text-zinc-300">Gender *</label>
                   <select
                     value={newJamaah.gender}
-                    onChange={(e) => setNewJamaah({ ...newJamaah, gender: e.target.value as Gender })}
+                    onChange={(e) => setNewJamaah({ ...newJamaah, gender: e.target.value as Gender | '' })}
                     className="w-full text-xs border border-slate-200 dark:border-zinc-600 rounded-lg p-2.5 bg-white dark:bg-zinc-700 text-slate-800 dark:text-zinc-100 outline-hidden focus:border-red-500"
                   >
+                    <option value="">— Pilih —</option>
                     <option value="Laki-laki">Laki-laki</option>
                     <option value="Perempuan">Perempuan</option>
                   </select>
@@ -6642,9 +6660,10 @@ export default function App() {
                   <label className="text-xs font-semibold text-slate-600 dark:text-zinc-300">Jenis Kelamin *</label>
                   <select
                     value={editingJamaah.gender}
-                    onChange={(e) => setEditingJamaah({ ...editingJamaah, gender: e.target.value as Gender })}
+                    onChange={(e) => setEditingJamaah({ ...editingJamaah, gender: e.target.value as Gender | '' })}
                     className="w-full text-xs border border-slate-200 dark:border-zinc-600 rounded-lg p-2.5 bg-slate-50 dark:bg-zinc-700/40 outline-hidden focus:border-red-500 cursor-pointer"
                   >
+                    <option value="">— Pilih —</option>
                     <option value="Laki-laki">♂️ Laki-laki</option>
                     <option value="Perempuan">♀️ Perempuan</option>
                   </select>

@@ -12,7 +12,7 @@ export interface Jamaah {
   name: string;
   passport: string;
   visa: string;
-  gender: Gender;
+  gender: Gender | ''; // '' = belum ditentukan (mis. tidak ada di Excel saat import)
   phone: string;
   entryMadinah: string; // YYYY-MM-DD
   exitMadinah: string; // YYYY-MM-DD
