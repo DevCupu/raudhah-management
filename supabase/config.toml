@@ -1,0 +1,4 @@
+# Supabase config file
+
+[functions.todos]
+verify_jwt = true # Set to false if you change auth mode to non-"user" (e.g. "publishable" or "secret")

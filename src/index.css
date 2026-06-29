@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-discord-blurple: #5865f2;
+  --color-discord-green: #35ed7e;
+  --color-discord-magenta: #ec48bd;
+  --color-discord-cyan: #00b0f4;
+  --color-discord-canvas: #0a0d3a;
+  --color-discord-indigo: #1e2353;
+  --color-discord-onyx: #23272a;
+  --color-discord-black: #000000;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #d1d5db;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Dark mode native dropdown options (popup list background is OS/white by default) */
+.dark select option,
+.dark select optgroup {
+  background-color: #27272a; /* zinc-800 */
+  color: #f4f4f5; /* zinc-100 */
+}
