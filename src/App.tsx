@@ -1525,7 +1525,7 @@ export default function App() {
   };
 
   const cleanStringDateTime = (str: string) => {
-    if (!str) return '2026-06-27T08:00';
+    if (!str) return ''; // kosong -> kosong (jangan tanam tanggal default)
     let cleaned = str.replace(' ', 'T').trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) {
       cleaned += 'T08:00';
@@ -1562,7 +1562,7 @@ export default function App() {
   };
 
   const cleanStringDateOnly = (str: string) => {
-    if (!str) return '2026-07-02';
+    if (!str) return ''; // kosong -> kosong (jangan tanam tanggal default)
     let cleaned = str.trim();
     if (cleaned.includes('T')) {
       cleaned = cleaned.split('T')[0];
@@ -6726,7 +6726,7 @@ export default function App() {
                     type="text"
                     required
                     placeholder="Contoh: Raudhah Al-Haramain Travel"
-                    value={editingJamaah.travel}
+                    value={editingJamaah.travel || ''}
                     onChange={(e) => setEditingJamaah({ ...editingJamaah, travel: e.target.value })}
                     className="w-full text-xs border border-slate-200 dark:border-zinc-600 rounded-lg p-2.5 bg-slate-50 dark:bg-zinc-700/40 outline-hidden focus:border-red-500"
                   />
