@@ -17,8 +17,10 @@ export const extractTextFromPdf = async (
   onProgress?: (page: number, total: number) => void
 ): Promise<string> => {
   try {
+    // Pakai SALINAN buffer (.slice) agar pdf.js tidak "melepas" (detach) buffer milik
+    // pemanggil — buffer bisa dipakai lagi setelah fungsi ini selesai tanpa error.
     // @ts-ignore
-    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) });
     const pdf = await loadingTask.promise;
     let fullText = '';
     for (let i = 1; i <= pdf.numPages; i++) {

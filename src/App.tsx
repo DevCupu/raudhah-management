@@ -2539,9 +2539,12 @@ export default function App() {
                   reader.readAsArrayBuffer(file);
                 });
 
-                // Count pages using PDFJS
+                // Count pages using PDFJS.
+                // PENTING: pakai SALINAN buffer (.slice) karena pdf.js "melepas" (detach)
+                // ArrayBuffer yang diberikan; tanpa salinan, extractTextFromPdf di bawah
+                // akan menerima buffer kosong -> "detached ArrayBuffer".
                 // @ts-ignore
-                const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+                const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) });
                 const pdfDoc = await loadingTask.promise;
                 pageCount = pdfDoc.numPages;
 
