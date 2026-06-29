@@ -458,10 +458,6 @@ export default function App() {
   const [settingsDefaultRaudhahSlot, setSettingsDefaultRaudhahSlot] = useState(() => {
     return localStorage.getItem('raudhah_default_raudhah_slot') || '';
   });
-  const [settingsDemoMode, setSettingsDemoMode] = useState(() => {
-    const saved = localStorage.getItem('raudhah_demo_mode');
-    return saved !== 'false';
-  });
   const [settingsGeminiApiKey, setSettingsGeminiApiKey] = useState(() => {
     return localStorage.getItem('raudhah_gemini_api_key') || '';
   });
@@ -713,10 +709,6 @@ export default function App() {
             if (s.key === 'default_password') setSettingsDefaultPassword(prev => prev !== s.value ? s.value : prev);
             if (s.key === 'default_raudhah_slot') setSettingsDefaultRaudhahSlot(prev => prev !== s.value ? s.value : prev);
             if (s.key === 'admin_password') setAdminPassword(prev => prev !== s.value ? s.value : prev);
-            if (s.key === 'demo_mode') setSettingsDemoMode(prev => {
-              const val = s.value === 'true';
-              return prev !== val ? val : prev;
-            });
           });
         }
 
@@ -831,10 +823,6 @@ export default function App() {
                 if (key === 'default_password') setSettingsDefaultPassword(prev => prev !== value ? value : prev);
                 if (key === 'default_raudhah_slot') setSettingsDefaultRaudhahSlot(prev => prev !== value ? value : prev);
                 if (key === 'admin_password') setAdminPassword(prev => prev !== value ? value : prev);
-                if (key === 'demo_mode') setSettingsDemoMode(prev => {
-                  const val = value === 'true';
-                  return prev !== val ? val : prev;
-                });
               }
             }
           )
@@ -891,10 +879,6 @@ export default function App() {
     updateSettingInSupabase('reference_date', settingsReferenceDate);
   }, [settingsReferenceDate]);
 
-  useEffect(() => {
-    localStorage.setItem('raudhah_demo_mode', String(settingsDemoMode));
-    updateSettingInSupabase('demo_mode', String(settingsDemoMode));
-  }, [settingsDemoMode]);
 
   useEffect(() => {
     localStorage.setItem('raudhah_gemini_api_key', settingsGeminiApiKey);
@@ -989,79 +973,93 @@ export default function App() {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen relative flex items-center justify-center p-4 antialiased overflow-hidden bg-slate-100 dark:bg-zinc-950 selection:bg-red-100 selection:text-red-900">
-        {/* Decorative background blobs */}
-        <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -left-40 w-[28rem] h-[28rem] rounded-full bg-blue-500/20 blur-3xl"></div>
-          <div className="absolute -bottom-40 -right-40 w-[28rem] h-[28rem] rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 blur-3xl"></div>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40rem] h-[40rem] rounded-full bg-sky-400/10 blur-3xl"></div>
-        </div>
+      <div className="min-h-screen flex antialiased overflow-hidden bg-zinc-950 selection:bg-red-100 selection:text-red-900">
+        {/* ── LEFT PANEL: Masjidil Haram Photo ───────────────────────────────── */}
+        <div className="hidden lg:flex relative flex-1 overflow-hidden">
+          <img
+            src="https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?q=90&w=1800&fit=crop"
+            alt="Masjidil Haram, Makkah"
+            className="absolute inset-0 w-full h-full object-cover object-center"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/25" />
 
-        {/* Dark mode toggle */}
-        <button
-          type="button"
-          onClick={() => setIsDarkMode(!isDarkMode)}
-          title={isDarkMode ? 'Mode Terang' : 'Mode Gelap'}
-          className="absolute top-5 right-5 z-20 p-2.5 rounded-full bg-white/70 dark:bg-zinc-800/70 backdrop-blur border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 shadow-sm transition-colors cursor-pointer"
-        >
-          {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-        </button>
+          {/* Logo top-left */}
+          <div className="relative z-10 p-8 self-start">
+            <img src="/logo.png" alt="Logo" className="h-10 object-contain bg-white/90 px-3 py-1 rounded-xl shadow-lg" />
+          </div>
 
-        <div className="w-full max-w-4xl grid md:grid-cols-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-          {/* Brand panel */}
-          <div className="relative hidden md:flex flex-col justify-between p-8 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white overflow-hidden">
-            <div className="absolute inset-0 opacity-25 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.3),transparent_55%)]"></div>
-            <div className="relative space-y-4">
-              <div className="h-12 flex items-center">
-                <img src="/logo.png" alt="24 Visa Logo" className="h-12 object-contain bg-white px-3 py-1 rounded-xl shadow-xs" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight leading-tight">Raudhah Barcode<br />Manager</h1>
-                <p className="text-xs text-white/80 mt-2 leading-relaxed">Sistem Manifes &amp; Pengolahan QR Code Nusuk Madinah untuk agen travel umrah &amp; haji.</p>
-              </div>
+          {/* Caption bottom */}
+          <div className="relative z-10 mt-auto p-10 text-white">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 border border-red-400/30 text-red-300 text-[11px] font-semibold tracking-wide mb-4">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+              Makkah Al-Mukarramah
             </div>
-            <div className="relative space-y-3 mt-8">
-              {[
-                { icon: <BookOpen className="w-3.5 h-3.5" />, text: 'Kelola manifes jamaah per rombongan travel' },
-                { icon: <Sparkles className="w-3.5 h-3.5" />, text: 'Prioritas otomatis & pelacakan slot Raudhah' },
-                { icon: <CheckCircle2 className="w-3.5 h-3.5" />, text: 'Pembagian tugas operator yang rapi' },
-              ].map((f, i) => (
-                <div key={i} className="flex items-center gap-2.5 text-xs text-white/90">
-                  <span className="w-6 h-6 rounded-lg bg-white/15 flex items-center justify-center shrink-0">{f.icon}</span>
-                  <span>{f.text}</span>
+            <h2 className="text-3xl font-bold leading-snug mb-2 drop-shadow-lg">
+              Masjidil Haram<br />
+              <span className="text-blue-300">Mekah, Arab Saudi</span>
+            </h2>
+            <p className="text-sm text-white/70 max-w-sm leading-relaxed">
+              Sistem pengelolaan QR Code Nusuk Madinah untuk jemaah umrah &amp; haji — cepat, akurat, dan terpusat.
+            </p>
+            <div className="flex items-center gap-3 mt-6">
+              {[{ icon: <BookOpen className="w-3 h-3" />, t: 'Manifes digital' }, { icon: <Sparkles className="w-3 h-3" />, t: 'Prioritas otomatis' }, { icon: <CheckCircle2 className="w-3 h-3" />, t: 'Multi-operator' }].map((f, i) => (
+                <div key={i} className="flex items-center gap-1.5 text-[11px] text-white/60">
+                  {f.icon}<span>{f.t}</span>
                 </div>
               ))}
             </div>
-            <p className="relative text-[10px] text-white/50 mt-8">© 2026 Raudhah Manager</p>
+            <p className="text-[10px] text-white/30 mt-5">Foto: Unsplash · © 2026 Raudhah Manager</p>
+          </div>
+        </div>
+
+        {/* ── RIGHT PANEL: Login Form ─────────────────────────────────────────── */}
+        <div className="relative w-full lg:w-[440px] xl:w-[480px] flex flex-col bg-white dark:bg-zinc-900 overflow-y-auto">
+
+          {/* Dark mode toggle */}
+          <button
+            type="button"
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            title={isDarkMode ? 'Mode Terang' : 'Mode Gelap'}
+            className="absolute top-5 right-5 z-20 p-2.5 rounded-full bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 shadow-sm transition-colors cursor-pointer"
+          >
+            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+
+          {/* Mobile: top image strip */}
+          <div className="lg:hidden h-40 relative overflow-hidden shrink-0">
+            <img
+              src="https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?q=80&w=800&fit=crop"
+              alt="Masjidil Haram"
+              className="w-full h-full object-cover object-[center_40%]"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-black/65" />
+            <div className="absolute bottom-4 left-5 flex items-center gap-2.5">
+              <img src="/logo.png" alt="Logo" className="h-8 object-contain bg-white/90 px-2 py-0.5 rounded-lg shadow" />
+              <span className="text-white font-bold text-sm drop-shadow">Raudhah Manager</span>
+            </div>
           </div>
 
-          {/* Form panel */}
-          <div className="p-8 sm:p-10 flex flex-col justify-center">
-            {/* Mobile logo */}
-            <div className="md:hidden flex items-center gap-3 mb-6">
-              <div className="h-10 flex items-center">
-                <img src="/logo.png" alt="24 Visa Logo" className="h-9 object-contain bg-white px-2 py-0.5 rounded-lg shadow-xs" />
+          {/* Form content */}
+          <div className="flex-1 flex flex-col justify-center px-8 sm:px-12 py-12">
+
+            <div className="mb-8">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-600 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-700/25 mb-4">
+                <span className="text-2xl leading-none">🕌</span>
               </div>
-              <div>
-                <h1 className="text-base font-bold text-slate-800 dark:text-zinc-100 tracking-tight leading-none">Raudhah Manager</h1>
-                <p className="text-[10px] text-slate-500 dark:text-zinc-400 mt-1">QR Code Nusuk Madinah</p>
-              </div>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-zinc-50 tracking-tight">Selamat Datang</h1>
+              <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">Masuk ke dashboard pengelolaan jemaah Anda.</p>
             </div>
 
-            <div className="mb-6">
-              <h2 className="text-lg font-bold text-slate-800 dark:text-zinc-100">Selamat Datang 👋</h2>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">Masuk untuk melanjutkan ke dashboard.</p>
-            </div>
-
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <form onSubmit={handleLoginSubmit} className="space-y-5">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-600 dark:text-zinc-300">Pilih Akun / Peran</label>
                 <div className="relative">
-                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-zinc-500 pointer-events-none" />
+                  <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-zinc-500 pointer-events-none" />
                   <select
                     value={loginTargetId}
                     onChange={(e) => setLoginTargetId(e.target.value)}
-                    className="w-full text-xs border border-slate-200 dark:border-zinc-700 rounded-xl py-2.5 pl-9 pr-9 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-medium appearance-none cursor-pointer"
+                    className="w-full text-sm border border-slate-200 dark:border-zinc-700 rounded-xl py-3 pl-10 pr-9 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-medium appearance-none cursor-pointer transition-all"
                   >
                     <option value="admin">Kantor Pusat (Admin)</option>
                     {operators.filter(op => op.isActive).map(op => (
@@ -1075,19 +1073,19 @@ export default function App() {
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-600 dark:text-zinc-300">Password Akses</label>
                 <div className="relative">
-                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-zinc-500 pointer-events-none" />
+                  <Key className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-zinc-500 pointer-events-none" />
                   <input
                     type={showLoginPassword ? 'text' : 'password'}
                     required
                     placeholder="Ketik password..."
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
-                    className="w-full text-sm border border-slate-200 dark:border-zinc-700 rounded-xl py-2.5 pl-9 pr-10 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono tracking-wide"
+                    className="w-full text-sm border border-slate-200 dark:border-zinc-700 rounded-xl py-3 pl-10 pr-11 bg-slate-50 dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono tracking-widest transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 dark:text-zinc-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 dark:text-zinc-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors cursor-pointer"
                   >
                     {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -1095,7 +1093,7 @@ export default function App() {
               </div>
 
               {loginError && (
-                <div className="flex items-center gap-2 text-[11px] text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 px-3 py-2 rounded-lg font-medium animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="flex items-center gap-2 text-[11px] text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 px-3 py-2.5 rounded-xl font-medium animate-in fade-in slide-in-from-top-1 duration-200">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                   <span>{loginError}</span>
                 </div>
@@ -1103,16 +1101,27 @@ export default function App() {
 
               <button
                 type="submit"
-                className="group w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-600/25 cursor-pointer flex items-center justify-center gap-2"
+                className="group w-full py-3.5 bg-gradient-to-r from-red-600 to-blue-700 hover:from-red-700 hover:to-blue-800 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-700/25 hover:shadow-blue-700/40 cursor-pointer flex items-center justify-center gap-2 active:scale-[0.98]"
               >
                 <span>Masuk Aplikasi</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
               </button>
             </form>
 
-            <p className="text-[10px] text-slate-400 dark:text-zinc-500 text-center mt-6">
-              Default Admin: <span className="font-mono font-semibold text-slate-500 dark:text-zinc-400">admin123</span> · Operator: <span className="font-mono font-semibold text-slate-500 dark:text-zinc-400">123456</span>
-            </p>
+            {/* Credentials hint */}
+            <div className="mt-8 p-4 rounded-2xl bg-slate-50 dark:bg-zinc-800/50 border border-slate-100 dark:border-zinc-700/50">
+              <p className="text-[10px] font-semibold text-slate-400 dark:text-zinc-500 mb-2 uppercase tracking-wider">Kredensial Default</p>
+              <div className="grid grid-cols-2 gap-3 text-[11px]">
+                <div className="space-y-0.5">
+                  <p className="text-slate-400 dark:text-zinc-500">Admin</p>
+                  <p className="font-mono font-bold text-slate-700 dark:text-zinc-200">admin123</p>
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-slate-400 dark:text-zinc-500">Operator</p>
+                  <p className="font-mono font-bold text-slate-700 dark:text-zinc-200">123456</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1715,163 +1724,6 @@ export default function App() {
     const today = new Date();
     const stamp = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
     XLSX.writeFile(wb, `data_jamaah_${stamp}.xlsx`);
-  };
-
-  // --- Excel Import Simulation ---
-  const triggerSampleExcel = () => {
-    // Generate beautiful, structured multi-travel preview instantly
-    const sampleRows = [
-      {
-        name: 'Mochammad Rizky',
-        passport: 'A9122384',
-        visa: 'V445588111',
-        gender: 'Laki-laki',
-        phone: '+62811223344',
-        email: 'rizky@annahl-travel.com',
-        entryMadinah: '2026-06-27T08:00',
-        exitMadinah: '2026-07-02',
-        travel: 'An-Nahl Umrah & Haji',
-        status: 'Valid',
-        reason: 'Siap diimport',
-        password: 'rizky123'
-      },
-      {
-        name: 'Siti Aminah',
-        passport: 'A5566778',
-        visa: 'V445566778',
-        gender: 'Perempuan',
-        phone: '+628123456789',
-        email: 'siti.aminah@annahl-travel.com',
-        entryMadinah: '2026-06-28T14:00',
-        exitMadinah: '2026-07-04',
-        travel: 'An-Nahl Umrah & Haji',
-        status: 'Valid',
-        reason: 'Siap diimport',
-        password: 'siti990'
-      },
-      {
-        name: 'Ahmad Dahlan',
-        passport: 'A2233441',
-        visa: 'V902231188',
-        gender: 'Laki-laki',
-        phone: '+62855667788',
-        email: 'ahmad.dahlan@annahl-travel.com',
-        entryMadinah: '2026-06-27T09:30',
-        exitMadinah: '2026-07-02',
-        travel: 'An-Nahl Umrah & Haji',
-        status: 'Valid',
-        reason: 'Siap diimport',
-        password: 'dahlan88'
-      },
-      {
-        name: 'Hasan Basri',
-        passport: 'A3344552',
-        visa: 'V902231199',
-        gender: 'Laki-laki',
-        phone: '+62855667789',
-        email: 'hasan@annahl-travel.com',
-        entryMadinah: '2026-06-27T10:15',
-        exitMadinah: '2026-07-02',
-        travel: 'An-Nahl Umrah & Haji',
-        status: 'Valid',
-        reason: 'Siap diimport',
-        password: 'hasan55'
-      },
-      {
-        name: 'Dewi Sartika',
-        passport: 'A4455663',
-        visa: 'V902231110',
-        gender: 'Perempuan',
-        phone: '+62855667790',
-        email: 'dewi.sartika@annahl-travel.com',
-        entryMadinah: '2026-06-28T15:00',
-        exitMadinah: '2026-07-04',
-        travel: 'An-Nahl Umrah & Haji',
-        status: 'Valid',
-        reason: 'Siap diimport',
-        password: 'dewi321'
-      },
-      // Travel Al-Fatih
-      {
-        name: 'Faisal Basri',
-        passport: 'A1100223',
-        visa: 'V339911002',
-        gender: 'Laki-laki',
-        phone: '+628998877665',
-        email: 'faisal.basri@fatih-tour.net',
-        entryMadinah: '2026-06-27T11:00',
-        exitMadinah: '2026-07-02',
-        travel: 'Al-Fatih Tour & Travel',
-        status: 'Valid',
-        reason: 'Siap diimport',
-        password: 'faisal00'
-      },
-      {
-        name: 'Yusuf Mansur',
-        passport: 'A1100224',
-        visa: 'V339911003',
-        gender: 'Laki-laki',
-        phone: '+628998877666',
-        email: 'yusuf.mansur@fatih-tour.net',
-        entryMadinah: '2026-06-27T13:45',
-        exitMadinah: '2026-07-02',
-        travel: 'Al-Fatih Tour & Travel',
-        status: 'Valid',
-        reason: 'Siap diimport',
-        password: 'yusuf22'
-      },
-      {
-        name: 'Lutfi Hakim',
-        passport: 'A1100225',
-        visa: 'V339911004',
-        gender: 'Laki-laki',
-        phone: '+628998877667',
-        email: 'lutfi.hakim@fatih-tour.net',
-        entryMadinah: '2026-06-27T16:20',
-        exitMadinah: '2026-07-02',
-        travel: 'Al-Fatih Tour & Travel',
-        status: 'Valid',
-        reason: 'Siap diimport',
-        password: 'lutfi44'
-      },
-      // Travel Marwah (with issue)
-      {
-        name: 'Supardi Atmojo',
-        passport: 'A7162534',
-        visa: 'V22119933',
-        gender: 'Laki-laki',
-        phone: '+62822334455',
-        email: 'supardi@marwah-travel.id',
-        entryMadinah: '2026-06-30T08:00',
-        exitMadinah: '2026-07-06',
-        travel: 'Marwah Tour & Travel',
-        status: 'Valid',
-        reason: 'Siap diimport',
-        password: 'supardi77'
-      },
-      {
-        name: 'Nurul Hidayah',
-        passport: '', // Empty passport
-        visa: 'V9022311',
-        gender: 'Perempuan',
-        phone: '+62855667788',
-        email: 'nurul@marwah-travel.id',
-        entryMadinah: '2026-06-29T10:00',
-        exitMadinah: '2026-07-05',
-        travel: 'Marwah Tour & Travel',
-        status: 'Tidak Lengkap',
-        reason: 'Nomor Paspor kosong',
-        password: '123456'
-      },
-    ];
-
-    setPreviewRows(sampleRows);
-    setImportStats({
-      total: sampleRows.length,
-      valid: sampleRows.filter(r => r.status === 'Valid').length,
-      duplicate: sampleRows.filter(r => r.status === 'Duplikat').length,
-      incomplete: sampleRows.filter(r => r.status === 'Tidak Lengkap').length,
-    });
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -3005,7 +2857,6 @@ export default function App() {
         { key: 'default_password', value: settingsDefaultPassword },
         { key: 'default_raudhah_slot', value: settingsDefaultRaudhahSlot },
         { key: 'admin_password', value: adminPassword },
-        { key: 'demo_mode', value: String(settingsDemoMode) },
       ]);
 
       // 2. Migrate operators
@@ -3075,7 +2926,6 @@ export default function App() {
       localStorage.removeItem('raudhah_nusuk_limit');
       localStorage.removeItem('raudhah_qr_lead_hours');
       localStorage.removeItem('raudhah_reference_date');
-      localStorage.removeItem('raudhah_demo_mode');
       localStorage.removeItem('raudhah_export_columns');
       localStorage.removeItem('raudhah_custom_fields');
       localStorage.removeItem('raudhah_default_password');
@@ -3107,7 +2957,6 @@ export default function App() {
       const mm = String(today.getMonth() + 1).padStart(2, '0');
       const dd = String(today.getDate()).padStart(2, '0');
       setSettingsReferenceDate(`${yyyy}-${mm}-${dd}`);
-      setSettingsDemoMode(true);
     }
 
     // 4. Kredensial & API (password admin, API key Gemini)
@@ -3150,28 +2999,6 @@ export default function App() {
   };
 
   // Simulated automatic official Raudhah barcode generator
-  const attachSimulatedBarcode = () => {
-    if (!selectedJamaah) return;
-    // Base64 sample representing a simple elegant green QR Code / official permit mockup
-    const dummyBarcode = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23fef2f2'/><rect x='10' y='10' width='30' height='30' fill='%23DC2626'/><rect x='15' y='15' width='20' height='20' fill='white'/><rect x='18' y='18' width='14' height='14' fill='%23DC2626'/><rect x='60' y='10' width='30' height='30' fill='%23DC2626'/><rect x='65' y='15' width='20' height='20' fill='white'/><rect x='68' y='18' width='14' height='14' fill='%23DC2626'/><rect x='10' y='60' width='30' height='30' fill='%23DC2626'/><rect x='15' y='65' width='20' height='20' fill='white'/><rect x='18' y='68' width='14' height='14' fill='%23DC2626'/><rect x='50' y='50' width='10' height='10' fill='%23DC2626'/><rect x='70' y='70' width='10' height='10' fill='%23DC2626'/><rect x='60' y='60' width='10' height='10' fill='%23DC2626'/><rect x='80' y='50' width='10' height='10' fill='%23DC2626'/><text x='50' y='95' font-family='sans-serif' font-size='5' font-weight='bold' fill='%23B91C1C' text-anchor='middle'>OFFICIAL NUSUK PERMIT</text></svg>";
-    
-    setJamaahs(prev =>
-      prev.map(j => {
-        if (j.id === selectedJamaah.id) {
-          const updated = {
-            ...j,
-            qrCodeUrl: dummyBarcode,
-            qrUploadedAt: new Date().toISOString(),
-            status: 'QR Berhasil' as JamaahStatus,
-          };
-          setSelectedJamaah(updated);
-          return updated;
-        }
-        return j;
-      })
-    );
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-800/50 dark:bg-zinc-950 flex flex-col md:flex-row text-slate-900 dark:text-zinc-100 font-sans antialiased selection:bg-red-100 selection:text-red-900 overflow-x-hidden">
       
@@ -4505,17 +4332,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {settingsDemoMode && (
-                      <div className="pt-1 text-center">
-                        <button
-                          onClick={triggerSampleExcel}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-zinc-200 bg-slate-100 dark:bg-zinc-700 hover:bg-slate-200 rounded-md border border-slate-200 dark:border-zinc-600 transition-colors"
-                        >
-                          <Sparkles className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400" />
-                          <span>Simulasikan / Gunakan Batch Sampel Excel (1 Detik)</span>
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </div>
               ) : (
@@ -4991,26 +4807,6 @@ export default function App() {
                           onChange={(e) => setSettingsReferenceDate(e.target.value)}
                           className="text-xs border border-slate-200 dark:border-zinc-700 rounded-lg p-2 w-full sm:w-64 bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 outline-hidden focus:border-red-500 font-mono text-center font-semibold"
                         />
-                      </div>
-
-                      {/* Row 5: Mode Demo */}
-                      <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-semibold text-slate-800 dark:text-zinc-100">Mode Demo (Simulasi)</span>
-                          <p className="text-[11px] text-slate-500 dark:text-zinc-400">Aktifkan tombol bantuan simulasi (seperti generator barcode & sampel Excel otomatis).</p>
-                        </div>
-                        <div className="flex items-center">
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={settingsDemoMode}
-                              onChange={(e) => setSettingsDemoMode(e.target.checked)}
-                              className="sr-only peer"
-                            />
-                            <div className="w-11 h-6 bg-slate-200 dark:bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
-                            <span className="ml-3 text-xs font-medium text-slate-700 dark:text-zinc-200">{settingsDemoMode ? 'Aktif' : 'Nonaktif'}</span>
-                          </label>
-                        </div>
                       </div>
 
                       {/* Excel Columns Config */}
@@ -6232,15 +6028,6 @@ export default function App() {
                           className="hidden"
                         />
                       </label>
-                      
-                      {settingsDemoMode && activeOperatorId === null && (
-                        <button
-                          onClick={attachSimulatedBarcode}
-                          className="flex-1 py-1.5 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-semibold transition-colors"
-                        >
-                          Tempel Barcode Sampel (Auto)
-                        </button>
-                      )}
                     </div>
                   </div>
                 )}
