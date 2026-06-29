@@ -1980,6 +1980,15 @@ export default function App() {
     });
   };
 
+  // Ganti nama travel/rombongan untuk semua baris preview dalam satu grup (sebelum import).
+  const renamePreviewTravel = (oldName: string, newNameRaw: string) => {
+    const newName = newNameRaw.trim();
+    if (!newName || newName === oldName) return;
+    setPreviewRows(prev =>
+      prev.map(r => ((r.travel || 'Raudhah Al-Haramain Travel') === oldName ? { ...r, travel: newName } : r))
+    );
+  };
+
   // Jaga statistik import (total/valid/duplikat/tidak lengkap) selalu sinkron dgn previewRows.
   useEffect(() => {
     setImportStats({
@@ -4458,12 +4467,18 @@ export default function App() {
                               </div>
                               <div>
                                 <h4 className="font-bold text-slate-800 dark:text-zinc-100 text-sm flex items-center gap-2">
-                                  <span>{travelName}</span>
+                                  <input
+                                    defaultValue={travelName}
+                                    onBlur={(e) => renamePreviewTravel(travelName, e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                    title="Klik untuk mengubah nama travel/rombongan grup ini"
+                                    className="font-bold text-slate-800 dark:text-zinc-100 text-sm bg-transparent border border-transparent hover:border-slate-300 dark:hover:border-zinc-600 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-900 rounded px-1.5 py-0.5 outline-none transition-colors min-w-[220px]"
+                                  />
                                   <span className="px-2 py-0.5 rounded bg-blue-50 text-red-700 border border-blue-100 text-[10px] font-semibold">
                                     {rows.length} Pax
                                   </span>
                                 </h4>
-                                <p className="text-[10px] text-slate-500 dark:text-zinc-400 mt-0.5">Rincian manifest travel ini ({validCount} Pax valid siap dimasukkan)</p>
+                                <p className="text-[10px] text-slate-500 dark:text-zinc-400 mt-0.5">Rincian manifest travel ini ({validCount} Pax valid siap dimasukkan) — klik nama travel di atas untuk mengubahnya.</p>
                               </div>
                             </div>
                             
