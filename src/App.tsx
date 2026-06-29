@@ -2729,7 +2729,7 @@ export default function App() {
         operatorId: existingIndex !== -1 ? updated[existingIndex].operatorId : null,
         status: existingIndex !== -1 ? updated[existingIndex].status : 'Ready',
         notes: existingIndex !== -1
-          ? `${updated[existingIndex].notes || ''} (Di-update via Scan Massal PDF/Gambar).`
+          ? `${updated[existingIndex].notes || ''} (Di-update via Scan Massal PDF).`
           : `Di-import via Scan Massal Visa (${r.fileName}).`,
         qrCodeUrl: existingIndex !== -1 ? updated[existingIndex].qrCodeUrl : null,
         qrUploadedAt: existingIndex !== -1 ? updated[existingIndex].qrUploadedAt : null,
@@ -3353,7 +3353,7 @@ export default function App() {
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-xs shrink-0"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Scan Massal Visa (PDF/Gambar)</span>
+                    <span>Scan Massal Visa (PDF)</span>
                   </button>
                 </>
               )}
@@ -3776,7 +3776,7 @@ export default function App() {
                         className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold hover:from-blue-700 hover:to-indigo-700 transition-colors shadow-xs shrink-0"
                       >
                         <Sparkles className="w-4 h-4" />
-                        <span>Scan Massal Visa (PDF/Gambar)</span>
+                        <span>Scan Massal Visa (PDF)</span>
                       </button>
 
                       {/* Add Manual Trigger */}
@@ -6858,7 +6858,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: BATCH VISA SCAN (PDF & IMAGES) */}
+      {/* MODAL: BATCH VISA SCAN (PDF teks digital saja) */}
       {showBatchScanModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-zinc-800">
@@ -6870,7 +6870,7 @@ export default function App() {
                   <Sparkles className="w-5 h-5 text-blue-600 animate-pulse" />
                   <span>Scan Massal Visa Jemaah (Maks 50 File)</span>
                 </h3>
-                <p className="text-xs text-slate-400 dark:text-zinc-400 font-medium">Unggah kumpulan PDF visa atau foto visa untuk dideteksi otomatis secara massal.</p>
+                <p className="text-xs text-slate-400 dark:text-zinc-400 font-medium">Unggah kumpulan PDF visa (teks digital) untuk dideteksi otomatis secara massal.</p>
               </div>
               <button
                 type="button"
