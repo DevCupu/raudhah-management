@@ -2544,7 +2544,6 @@ export default function App() {
         while (attempt < 3 && !success) {
           if (cancelBatchRef.current) break;
           attempt++;
-          recordGeminiApiCall();
           try {
             let pdfText = '';
             setBatchActiveFileProgress(10);
@@ -2598,6 +2597,7 @@ export default function App() {
 
             // PDF teks digital: kirim teks saja (cepat & hemat).
             setBatchScanProgress(prev => ({ ...prev, status: `Mengirim teks visa ke Gemini AI (Hemat & Cepat): ${file.name}...` }));
+            recordGeminiApiCall(); // hitung kuota hanya saat benar-benar memanggil API
             const extracted = await requestVisa([{ text: buildVisaTextPrompt(pdfText) }]);
 
             const items = Array.isArray(extracted) ? extracted : [extracted];
@@ -2625,6 +2625,11 @@ export default function App() {
             setBatchScanSuccessFilesCount(prev => prev + 1);
           } catch (err: any) {
             console.error(err);
+            const msg = String(err?.message || err);
+            // Hanya rate-limit & gangguan jaringan yang layak diulang. Error lain
+            // (PDF tanpa teks, output terpotong, JSON invalid) pasti berulang -> gagal cepat.
+            const isNetwork = /failed to fetch|networkerror|load failed/i.test(msg);
+            const retryable = Boolean(err?.isRateLimit) || isNetwork;
             const waitSec = err?.isRateLimit ? Math.max(err.retryDelaySec || 0, 30) : 2;
             if (err?.isRateLimit) {
               // Tandai status rate-limit NYATA agar tampil di panel Settings.
@@ -2634,10 +2639,11 @@ export default function App() {
                 status: `Rate limit terlampaui. Menjeda cooldown selama ${waitSec} detik sesuai saran Google...`
               }));
             }
-            if (attempt === 3) {
+            if (!retryable || attempt === 3) {
               failedFileCount++;
               setBatchScanFailedFilesCount(prev => prev + 1);
-              setBatchScanErrors(prev => [...prev, { fileName: file.name, error: err.message || String(err) }]);
+              setBatchScanErrors(prev => [...prev, { fileName: file.name, error: msg }]);
+              break; // berhenti mengulang berkas ini
             } else {
               await sleep(waitSec * 1000); // cooldown sebelum percobaan berikutnya
             }
@@ -6918,7 +6924,7 @@ export default function App() {
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                     />
                     <div className="space-y-3 pointer-events-none">
-                      <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto group-hover:scale-105 transition-transform duration-200">
+                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center mx-auto group-hover:scale-105 shadow-lg shadow-blue-500/20 transition-transform duration-200">
                         <Upload className="w-6 h-6" />
                       </div>
                       <div className="space-y-1">
@@ -6934,20 +6940,37 @@ export default function App() {
                   {batchScanFiles.length > 0 && (
                     <div className="space-y-2.5 animate-in fade-in duration-150">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-700 dark:text-zinc-200">{batchScanFiles.length} berkas dipilih:</span>
+                        <span className="text-xs font-bold text-slate-700 dark:text-zinc-200 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                          {batchScanFiles.length} berkas siap dipindai
+                          <span className="font-medium text-slate-400 dark:text-zinc-500">
+                            · {(batchScanFiles.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(2)} MB total
+                          </span>
+                        </span>
                         <button
                           type="button"
                           onClick={() => setBatchScanFiles([])}
-                          className="text-[10px] text-red-600 hover:underline font-semibold"
+                          className="text-[10px] text-red-600 hover:text-red-700 hover:underline font-semibold flex items-center gap-1"
                         >
-                          Bersihkan Pilihan
+                          <Trash2 className="w-3 h-3" /> Bersihkan
                         </button>
                       </div>
-                      <div className="max-h-48 overflow-y-auto border border-slate-200 dark:border-zinc-800 rounded-xl p-2.5 space-y-1.5 bg-white dark:bg-zinc-800/30">
+                      <div className="max-h-48 overflow-y-auto border border-slate-200 dark:border-zinc-800 rounded-xl p-2 space-y-1.5 bg-white dark:bg-zinc-800/30">
                         {batchScanFiles.map((file, idx) => (
-                          <div key={idx} className="flex items-center justify-between text-[11px] p-2 bg-slate-50 dark:bg-zinc-800/70 rounded-lg border border-slate-100 dark:border-zinc-700">
-                            <span className="font-medium text-slate-700 dark:text-zinc-200 truncate max-w-[70%]">{file.name}</span>
-                            <span className="text-slate-400">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                          <div key={idx} className="group/file flex items-center gap-2.5 text-[11px] p-2 bg-slate-50 dark:bg-zinc-800/70 rounded-lg border border-slate-100 dark:border-zinc-700 hover:border-blue-300 dark:hover:border-blue-700/50 transition-colors">
+                            <div className="w-7 h-7 shrink-0 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-500 dark:text-red-400 flex items-center justify-center">
+                              <FileText className="w-3.5 h-3.5" />
+                            </div>
+                            <span className="font-medium text-slate-700 dark:text-zinc-200 truncate flex-1" title={file.name}>{file.name}</span>
+                            <span className="text-slate-400 shrink-0 tabular-nums">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                            <button
+                              type="button"
+                              onClick={() => setBatchScanFiles(prev => prev.filter((_, i) => i !== idx))}
+                              className="shrink-0 p-1 rounded-md text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 opacity-0 group-hover/file:opacity-100 transition-all"
+                              title="Hapus berkas ini"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -6955,9 +6978,8 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => processBatchVisaScan(batchScanFiles)}
-                        className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        <Sparkles className="w-4 h-4 text-blue-400" />
+                        className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm hover:shadow-md hover:shadow-blue-500/20 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]">
+                        <Sparkles className="w-4 h-4" />
                         <span>Mulai Pemindaian Otomatis ({batchScanFiles.length} File)</span>
                       </button>
                     </div>
