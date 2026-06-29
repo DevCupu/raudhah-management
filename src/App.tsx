@@ -564,6 +564,25 @@ export default function App() {
     return sessionMinuteRequests.filter(t => t > oneMinuteAgo).length;
   };
 
+  // --- Deteksi rate-limit NYATA (saat Google benar-benar menolak dgn 429) ---
+  // Berbeda dari hitungan RPM/RPD di atas yang hanya estimasi. Ini dipicu oleh
+  // respons 429 sungguhan, menyimpan kapan cooldown berakhir (pakai saran RetryInfo Google).
+  const [geminiRateLimitedUntil, setGeminiRateLimitedUntil] = useState<number>(() => {
+    const v = localStorage.getItem('raudhah_gemini_ratelimit_until');
+    return v ? Number(v) : 0;
+  });
+  const markGeminiRateLimited = (retrySec?: number) => {
+    const until = Date.now() + Math.max(retrySec || 0, 15) * 1000;
+    setGeminiRateLimitedUntil(until);
+    localStorage.setItem('raudhah_gemini_ratelimit_until', String(until));
+  };
+  const clearGeminiRateLimited = () => {
+    setGeminiRateLimitedUntil(0);
+    localStorage.removeItem('raudhah_gemini_ratelimit_until');
+  };
+  const isRateLimitedNow = geminiRateLimitedUntil > Date.now();
+  const rateLimitSecondsLeft = isRateLimitedNow ? Math.ceil((geminiRateLimitedUntil - Date.now()) / 1000) : 0;
+
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => {
@@ -2386,6 +2405,8 @@ export default function App() {
             if (testResponse.status === 429 || errorMsg.toLowerCase().includes('quota') || errorMsg.toLowerCase().includes('limit')) {
               diagnostics.selectedModelStatus = 'quota_exceeded';
               diagnostics.selectedModelDetails = `Kuota terlampaui / Limit 0: ${errorMsg}`;
+              // Tandai rate-limit NYATA agar tampil di panel Settings (cooldown default).
+              markGeminiRateLimited();
             } else {
               diagnostics.selectedModelStatus = 'error';
               diagnostics.selectedModelDetails = `Gagal uji coba konten: ${errorMsg}`;
@@ -2393,6 +2414,8 @@ export default function App() {
           } else {
             diagnostics.selectedModelStatus = 'working';
             diagnostics.selectedModelDetails = `Model berjalan normal dan siap digunakan.`;
+            // Model merespons normal -> pasti tidak sedang kena rate limit. Bersihkan status.
+            clearGeminiRateLimited();
           }
         } catch (testErr: any) {
           diagnostics.selectedModelStatus = 'error';
@@ -2604,9 +2627,11 @@ export default function App() {
             console.error(err);
             const waitSec = err?.isRateLimit ? Math.max(err.retryDelaySec || 0, 30) : 2;
             if (err?.isRateLimit) {
-              setBatchScanProgress(prev => ({ 
-                ...prev, 
-                status: `Rate limit terlampaui. Menjeda cooldown selama ${waitSec} detik sesuai saran Google...` 
+              // Tandai status rate-limit NYATA agar tampil di panel Settings.
+              markGeminiRateLimited(err.retryDelaySec);
+              setBatchScanProgress(prev => ({
+                ...prev,
+                status: `Rate limit terlampaui. Menjeda cooldown selama ${waitSec} detik sesuai saran Google...`
               }));
             }
             if (attempt === 3) {
@@ -5266,7 +5291,27 @@ export default function App() {
                             <Gauge className="w-4 h-4 text-discord-blurple" />
                             <span>Status Kuota & Penggunaan API ({settingsGeminiModel})</span>
                           </div>
-                          
+
+                          {/* Indikator rate-limit NYATA: muncul saat request terakhir benar-benar ditolak 429 */}
+                          {isRateLimitedNow ? (
+                            <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700/50">
+                              <span className="flex items-center gap-2 text-[11px] font-bold text-red-600 dark:text-red-400">
+                                <span className="animate-pulse">🔴</span>
+                                Model sedang KENA RATE LIMIT
+                              </span>
+                              <span className="text-[11px] font-semibold text-red-500 dark:text-red-300">
+                                Tunggu ± {rateLimitSecondsLeft} detik
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/40">
+                              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                                <span>🟢</span>
+                                Model siap (tidak ada penolakan rate limit terbaru)
+                              </span>
+                            </div>
+                          )}
+
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Minute Limit (RPM) */}
                             <div className="space-y-1.5 p-3 bg-white dark:bg-discord-onyx/50 border border-slate-200/50 dark:border-discord-onyx rounded-lg">
