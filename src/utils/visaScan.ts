@@ -3,9 +3,6 @@
 // Tidak bergantung pada state React — semua input lewat parameter.
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Prompt untuk jalur GAMBAR/scan (visa dikirim sebagai gambar).
-export const VISA_IMAGE_PROMPT =
-  "Ekstrak data jemaah dari gambar/pdf visa umrah/haji ini. Halaman dokumen bisa berisi satu visa jemaah atau merupakan dokumen gabungan. PENTING: Setiap jemaah HARUS memiliki nomor paspor valid (diawali huruf diikuti angka, contoh: A1234567). JANGAN sertakan header tabel, footer, nomor halaman, atau data lain yang bukan data jemaah. JANGAN membuat data jemaah dari informasi berulang. Gunakan kunci berikut:\n- name (Nama lengkap jemaah)\n- passport (Nomor Paspor, WAJIB diisi)\n- visa (Nomor Visa)\n- gender (Isi dengan \"Laki-laki\" atau \"Perempuan\" saja. Tebak secara cerdas dari nama jemaah jika jenis kelamin tidak tertulis eksplisit)\n- entryMadinah (Tanggal kedatangan/masuk Madinah dalam format YYYY-MM-DD. Jika tidak ditemukan, biarkan string kosong \"\")\n- exitMadinah (Tanggal keberangkatan/keluar Madinah dalam format YYYY-MM-DD. Jika tidak ditemukan, biarkan string kosong \"\")\n- travel (Nama travel/agen umrah yang tertera pada visa, cari di kolom 'External Agent' atau 'Umrah Operator'. Jika tertulis dalam bahasa/huruf Arab, terjemahkan atau transliterasikan ke huruf Latin Indonesia/Inggris secara cerdas, contoh: 'مجموعة بي TI رحمة الدولية' menjadi 'PT Rahma Internasional')\n\nHarap kembalikan HANYA string JSON Array mentah, misalnya: [ { \"name\": \"...\", \"passport\": \"...\" }, ... ]. Jangan gunakan blok format markdown (seperti ```json) atau teks penjelasan lainnya agar data langsung dapat di-parse oleh sistem.";
 
 // Prompt untuk jalur TEKS (PDF teks digital). Teks hasil ekstraksi disisipkan.
 export const buildVisaTextPrompt = (pdfText: string): string =>
@@ -37,32 +34,6 @@ export const extractTextFromPdf = async (
   }
 };
 
-// Render satu halaman PDF menjadi gambar JPEG (base64 data URL) memakai pdfjs.
-// Dipakai untuk PDF hasil scan/gambar agar dapat dikirim per-halaman ke Gemini,
-// menghindari payload raksasa (penyebab "Failed to fetch") pada PDF multipage.
-// PENTING: batasi lebar ke maxWidth agar scan DPI-tinggi tidak membuat kanvas raksasa
-// yang lambat di-render & berat dikirim.
-export const renderPdfPageToJpeg = async (
-  pdfDoc: any,
-  pageNum: number,
-  maxWidth = 800
-): Promise<string> => {
-  const page = await pdfDoc.getPage(pageNum);
-  const baseViewport = page.getViewport({ scale: 1 });
-  // Skala disesuaikan agar lebar hasil <= maxWidth (jangan memperbesar bila sudah kecil).
-  const scale = Math.min(maxWidth / baseViewport.width, 2.0);
-  const viewport = page.getViewport({ scale });
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  canvas.width = Math.ceil(viewport.width);
-  canvas.height = Math.ceil(viewport.height);
-  await page.render({ canvasContext: context, viewport, canvas } as any).promise;
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-  // Bebaskan memori canvas (penting saat memproses puluhan halaman).
-  canvas.width = 0;
-  canvas.height = 0;
-  return dataUrl;
-};
 
 export interface VisaRequestOptions {
   apiKey: string;

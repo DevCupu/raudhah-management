@@ -60,10 +60,8 @@ import {
 } from './utils/supabaseClient';
 import { INITIAL_JAMAAH, INITIAL_OPERATORS } from './data/mockData';
 import {
-  VISA_IMAGE_PROMPT,
   buildVisaTextPrompt,
   extractTextFromPdf,
-  renderPdfPageToJpeg,
   requestVisaExtraction,
 } from './utils/visaScan';
 import * as XLSX from 'xlsx';
@@ -469,9 +467,6 @@ export default function App() {
   });
   const [settingsGeminiModel, setSettingsGeminiModel] = useState(() => {
     return localStorage.getItem('raudhah_gemini_model') || 'gemini-2.0-flash';
-  });
-  const [settingsPdfScanMode, setSettingsPdfScanMode] = useState<'auto' | 'text' | 'ocr'>(() => {
-    return (localStorage.getItem('raudhah_pdf_scan_mode') as 'auto' | 'text' | 'ocr') || 'auto';
   });
 
   const [settingsSupabaseUrl, setSettingsSupabaseUrl] = useState(() => {
@@ -890,9 +885,7 @@ export default function App() {
     localStorage.setItem('raudhah_gemini_model', settingsGeminiModel);
   }, [settingsGeminiModel]);
 
-  useEffect(() => {
-    localStorage.setItem('raudhah_pdf_scan_mode', settingsPdfScanMode);
-  }, [settingsPdfScanMode]);
+
 
   useEffect(() => {
     localStorage.setItem('raudhah_supabase_url', settingsSupabaseUrl);
@@ -2287,8 +2280,10 @@ export default function App() {
             passport: (extracted.passport || '').toUpperCase() || prev.passport,
             visa: extracted.visa || prev.visa,
             gender: (extracted.gender === 'Laki-laki' || extracted.gender === 'Perempuan') ? extracted.gender : prev.gender,
-            entryMadinah: extracted.entryMadinah ? `${extracted.entryMadinah}T08:00` : prev.entryMadinah,
-            exitMadinah: extracted.exitMadinah || prev.exitMadinah,
+            // Tanggal Masuk/Keluar Madinah sengaja DIKOSONGKAN agar diisi manual oleh user,
+            // bukan auto-isi dari hasil scan.
+            entryMadinah: '',
+            exitMadinah: '',
             travel: extracted.travel || prev.travel
           }));
 
@@ -2434,8 +2429,12 @@ export default function App() {
       return;
     }
 
-    // Filter file sizes (Google Gemini supports up to 20MB inline payloads)
+    // Filter berkas (Hanya mendukung PDF dengan teks digital di bawah 20MB)
     const validFiles = files.filter(f => {
+      if (f.type !== 'application/pdf') {
+        setBatchScanErrors(prev => [...prev, { fileName: f.name, error: 'Hanya mendukung berkas PDF dengan teks digital.' }]);
+        return false;
+      }
       if (f.size > 20 * 1024 * 1024) {
         setBatchScanErrors(prev => [...prev, { fileName: f.name, error: 'File terlalu besar (melebihi 20MB)' }]);
         return false;
@@ -2444,7 +2443,7 @@ export default function App() {
     });
 
     if (validFiles.length === 0) {
-      alert('Tidak ada file valid untuk diproses (semua file melebihi batas 20MB).');
+      alert('Tidak ada berkas PDF valid yang terpilih untuk diproses.');
       return;
     }
 
@@ -2524,217 +2523,83 @@ export default function App() {
           attempt++;
           recordGeminiApiCall();
           try {
-            let hasText = false;
             let pdfText = '';
             setBatchActiveFileProgress(10);
 
-            // 1. Try to extract searchable text if PDF
-            if (file.type === 'application/pdf') {
-              try {
-                setBatchScanProgress(prev => ({ ...prev, status: `Mengekstrak teks digital dari PDF: ${file.name}...` }));
-                const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onload = () => resolve(reader.result as ArrayBuffer);
-                  reader.onerror = () => reject(new Error('Gagal membaca ArrayBuffer'));
-                  reader.readAsArrayBuffer(file);
-                });
+            // Mengekstrak teks digital dari PDF
+            setBatchScanProgress(prev => ({ ...prev, status: `Mengekstrak teks digital dari PDF: ${file.name}...` }));
+            const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as ArrayBuffer);
+              reader.onerror = () => reject(new Error('Gagal membaca ArrayBuffer'));
+              reader.readAsArrayBuffer(file);
+            });
 
-                // Count pages using PDFJS.
-                // PENTING: pakai SALINAN buffer (.slice) karena pdf.js "melepas" (detach)
-                // ArrayBuffer yang diberikan; tanpa salinan, extractTextFromPdf di bawah
-                // akan menerima buffer kosong -> "detached ArrayBuffer".
-                // @ts-ignore
-                const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) });
-                const pdfDoc = await loadingTask.promise;
-                pageCount = pdfDoc.numPages;
+            // Count pages using PDFJS
+            // @ts-ignore
+            const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) });
+            const pdfDoc = await loadingTask.promise;
+            pageCount = pdfDoc.numPages;
 
-                if (settingsPdfScanMode === 'ocr') {
-                  hasText = false;
-                  docType = 'PDF (Gambar/Scan)';
-                  charCount = 0;
-                } else {
-                  pdfText = await extractTextFromPdf(arrayBuffer, (curr, tot) => {
-                    setBatchActiveFileProgress(Math.floor(10 + (curr / tot) * 30));
-                  });
-                  const cleanedText = pdfText.replace(/--- HALAMAN \d+ ---/g, '').trim();
-                  charCount = cleanedText.length;
-                  
-                  if (settingsPdfScanMode === 'text') {
-                    hasText = true;
-                    docType = 'PDF (Teks Digital)';
-                  } else {
-                    // 'auto' mode
-                    if (cleanedText && cleanedText.length > 50) {
-                      hasText = true;
-                      docType = 'PDF (Teks Digital)';
-                    } else {
-                      hasText = false;
-                      docType = 'PDF (Gambar/Scan)';
-                    }
-                  }
-                }
+            pdfText = await extractTextFromPdf(arrayBuffer, (curr, tot) => {
+              setBatchActiveFileProgress(Math.floor(10 + (curr / tot) * 30));
+            });
+            const cleanedText = pdfText.replace(/--- HALAMAN \d+ ---/g, '').trim();
+            charCount = cleanedText.length;
+            docType = 'PDF (Teks Digital)';
 
-                // Update metadata
-                setBatchScanFileMeta({
-                  name: file.name,
-                  size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
-                  pages: pageCount,
-                  charCount: charCount,
-                  type: docType
-                });
-              } catch (pdfErr) {
-                console.warn('PDF text extraction skipped, fallback to OCR:', pdfErr);
-              }
+            // Update metadata
+            setBatchScanFileMeta({
+              name: file.name,
+              size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+              pages: pageCount,
+              charCount: charCount,
+              type: docType
+            });
+
+            if (cleanedText.length < 15) {
+              throw new Error('PDF tidak memiliki lapisan teks digital (hasil scan/foto tidak didukung).');
             }
 
-            // Progres nyata berbasis langkah. PDF scan diperbarui per grup halaman
-            // di dalam loop di bawah; jalur teks/gambar tunggal langsung ke 100 saat selesai.
-            setBatchActiveFileProgress(hasText ? 55 : 45);
+            setBatchActiveFileProgress(55);
 
-            {
-              // Bungkus tipis di sekitar modul visaScan: suntik kredensial & config dari state.
-              const requestVisa = (parts: any[]): Promise<any[]> =>
-                requestVisaExtraction({
-                  apiKey: settingsGeminiApiKey,
-                  model: settingsGeminiModel,
-                  parts,
-                  maxOut,
-                  thinkingConfig,
-                });
-
-              let extracted: any[];
-
-              if (hasText) {
-                // PDF teks digital: kirim teks saja (cepat & hemat).
-                setBatchScanProgress(prev => ({ ...prev, status: `Mengirim teks visa ke Gemini AI (Hemat & Cepat): ${file.name}...` }));
-                extracted = await requestVisa([{ text: buildVisaTextPrompt(pdfText) }]);
-              } else if (file.type === 'application/pdf') {
-                // PDF Gambar/Scan: render TIAP halaman jadi gambar, kirim per-halaman.
-                // Menghindari payload raksasa ("Failed to fetch") & MAX_TOKENS pada PDF multipage.
-                const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onload = () => resolve(reader.result as ArrayBuffer);
-                  reader.onerror = () => reject(new Error('Gagal membaca ArrayBuffer'));
-                  reader.readAsArrayBuffer(file);
-                });
-                // @ts-ignore
-                const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
-                const pdfDoc = await loadingTask.promise;
-                const totalPages = pdfDoc.numPages;
-                const aggregated: any[] = [];
-                // Gabungkan beberapa halaman per request agar hemat kuota RPM (free tier).
-                // 55 halaman -> ~7 request, bukan 55. Tetap kecil & aman dari "Failed to fetch".
-                const PAGES_PER_REQUEST = 8;
-
-                for (let start = 1; start <= totalPages; start += PAGES_PER_REQUEST) {
-                  if (cancelBatchRef.current) break;
-                  while (pauseBatchRef.current && !cancelBatchRef.current) {
-                    await sleep(500);
-                  }
-                  if (cancelBatchRef.current) break;
-
-                  const end = Math.min(start + PAGES_PER_REQUEST - 1, totalPages);
-                  setBatchActiveFileProgress(Math.floor(45 + (end / totalPages) * 50));
-
-                  // Render halaman start..end menjadi gambar (satu inlineData per halaman).
-                  const imageParts: any[] = [];
-                  for (let p = start; p <= end; p++) {
-                    try {
-                      const jpegDataUrl = await renderPdfPageToJpeg(pdfDoc, p);
-                      imageParts.push({ inlineData: { mimeType: 'image/jpeg', data: jpegDataUrl.split(',')[1] } });
-                    } catch (renderErr) {
-                      console.warn(`Gagal render halaman ${p}:`, renderErr);
-                    }
-                  }
-                  if (imageParts.length === 0) continue;
-
-                  let groupDone = false;
-                  // Batasi penundaan rate-limit agar tidak mengulang selamanya bila
-                  // kuota harian (RPD) free tier sudah habis (429 menetap).
-                  let rateLimitWaits = 0;
-                  const MAX_RATE_LIMIT_WAITS = 5;
-                  for (let pageAttempt = 1; pageAttempt <= 3 && !groupDone; pageAttempt++) {
-                    if (cancelBatchRef.current) break;
-                    try {
-                      recordGeminiApiCall();
-                      setBatchScanProgress(prev => ({ ...prev, status: `Memindai halaman ${start}-${end} dari ${totalPages} (jemaah) via Gemini AI: ${file.name}...` }));
-                      const groupItems = await requestVisa([
-                        { text: VISA_IMAGE_PROMPT },
-                        ...imageParts
-                      ]);
-                      aggregated.push(...groupItems);
-                      groupDone = true;
-                    } catch (pageErr: any) {
-                      if (pageErr?.isRateLimit) {
-                        rateLimitWaits++;
-                        if (rateLimitWaits > MAX_RATE_LIMIT_WAITS) {
-                          // Rate limit menetap -> kuota free tier (per-menit/harian) habis. Berhenti.
-                          throw new Error('Kuota API key Gemini Anda sedang habis (rate limit menetap). Tunggu 1-2 menit lalu coba 1 file kecil, atau ganti API key / aktifkan billing. Hindari mencoba berulang karena memperpanjang blokir.');
-                        }
-                        // Patuhi waktu tunggu yang disarankan Google (RetryInfo); minimal 15 detik.
-                        const waitSec = Math.max(pageErr?.retryDelaySec || 0, 15);
-                        setBatchScanProgress(prev => ({ ...prev, status: `Rate limit terlampaui (halaman ${start}-${end}). Menunggu ${waitSec} detik sesuai Google... (${rateLimitWaits}/${MAX_RATE_LIMIT_WAITS})` }));
-                        await sleep(waitSec * 1000);
-                        pageAttempt--; // jangan habiskan jatah retry untuk rate limit (s/d batas di atas)
-                        continue;
-                      }
-                      if (pageAttempt === 3) {
-                        console.warn(`Halaman ${start}-${end} gagal setelah 3 percobaan:`, pageErr?.message);
-                      } else {
-                        await sleep(1500);
-                      }
-                    }
-                  }
-
-                  // Jeda antar grup agar tidak memicu rate limit RPM (terutama pada free tier).
-                  // Spacing 4.5 detik memastikan rata-rata request berada di bawah 15 RPM.
-                  if (end < totalPages) await sleep(4500);
-                }
-
-                extracted = aggregated;
-              } else {
-                // Gambar tunggal (JPG/PNG): kompres lalu kirim satu request.
-                const base64DataUrl = await new Promise<string>((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onload = () => resolve(reader.result as string);
-                  reader.onerror = () => reject(new Error('Gagal membaca file'));
-                  reader.readAsDataURL(file);
-                });
-                setBatchScanProgress(prev => ({ ...prev, status: `Mengompresi gambar visa: ${file.name}...` }));
-                const compressed = await compressImage(base64DataUrl, 800, 0.7);
-                const base64Data = compressed.split(',')[1];
-                const mimeType = compressed.split(';')[0].split(':')[1];
-                setBatchScanProgress(prev => ({ ...prev, status: `Memindai visa visual via Gemini AI (Percobaan ${attempt}/3): ${file.name}...` }));
-                extracted = await requestVisa([
-                  { text: VISA_IMAGE_PROMPT },
-                  { inlineData: { mimeType, data: base64Data } }
-                ]);
-              }
-
-              const items = Array.isArray(extracted) ? extracted : [extracted];
-              const validItems = items.filter(item => {
-                const passport = (item.passport || '').toUpperCase().trim();
-                item.passport = passport;
-                item.visa = (item.visa || '').trim();
-                item.customValues = item.customValues || {};
-                item.fileName = file.name;
-                if (!passport || passport.length < 4) return false;
-                if (seenPassportsInBatch.has(passport)) return false;
-                seenPassportsInBatch.add(passport);
-                return true;
+            // Bungkus tipis di sekitar modul visaScan: suntik kredensial & config dari state.
+            const requestVisa = (parts: any[]): Promise<any[]> =>
+              requestVisaExtraction({
+                apiKey: settingsGeminiApiKey,
+                model: settingsGeminiModel,
+                parts,
+                maxOut,
+                thinkingConfig,
               });
-              if (validItems.length > 0) {
-                setBatchScanResults(prev => [...prev, ...validItems]);
-              }
-              if (items.length !== validItems.length) {
-                const skipped = items.length - validItems.length;
-                console.warn(`Batch scan: ${skipped} item(s) skipped (no passport/duplicate) in file: ${file.name}`);
-              }
-              successVisaCount += validItems.length;
-              setBatchActiveFileProgress(100);
-              success = true;
-              setBatchScanSuccessFilesCount(prev => prev + 1);
+
+            // PDF teks digital: kirim teks saja (cepat & hemat).
+            setBatchScanProgress(prev => ({ ...prev, status: `Mengirim teks visa ke Gemini AI (Hemat & Cepat): ${file.name}...` }));
+            const extracted = await requestVisa([{ text: buildVisaTextPrompt(pdfText) }]);
+
+            const items = Array.isArray(extracted) ? extracted : [extracted];
+            const validItems = items.filter(item => {
+              const passport = (item.passport || '').toUpperCase().trim();
+              item.passport = passport;
+              item.visa = (item.visa || '').trim();
+              item.customValues = item.customValues || {};
+              item.fileName = file.name;
+              if (!passport || passport.length < 4) return false;
+              if (seenPassportsInBatch.has(passport)) return false;
+              seenPassportsInBatch.add(passport);
+              return true;
+            });
+            if (validItems.length > 0) {
+              setBatchScanResults(prev => [...prev, ...validItems]);
             }
+            if (items.length !== validItems.length) {
+              const skipped = items.length - validItems.length;
+              console.warn(`Batch scan: ${skipped} item(s) skipped (no passport/duplicate) in file: ${file.name}`);
+            }
+            successVisaCount += validItems.length;
+            setBatchActiveFileProgress(100);
+            success = true;
+            setBatchScanSuccessFilesCount(prev => prev + 1);
           } catch (err: any) {
             console.error(err);
             const waitSec = err?.isRateLimit ? Math.max(err.retryDelaySec || 0, 30) : 2;
@@ -2832,8 +2697,10 @@ export default function App() {
         gender: (r.gender === 'Laki-laki' || r.gender === 'Perempuan') ? r.gender : 'Laki-laki',
         phone: '-',
         email: '',
-        entryMadinah: r.entryMadinah ? `${r.entryMadinah}T08:00` : '2026-06-27T08:00',
-        exitMadinah: r.exitMadinah || '2026-07-02',
+        // Tanggal sengaja DIKOSONGKAN untuk jemaah baru (diisi manual oleh user).
+        // Jemaah lama yang di-update tetap mempertahankan tanggalnya.
+        entryMadinah: existingIndex !== -1 ? updated[existingIndex].entryMadinah : '',
+        exitMadinah: existingIndex !== -1 ? updated[existingIndex].exitMadinah : '',
         operatorId: existingIndex !== -1 ? updated[existingIndex].operatorId : null,
         status: existingIndex !== -1 ? updated[existingIndex].status : 'Ready',
         notes: existingIndex !== -1
@@ -3202,11 +3069,9 @@ export default function App() {
       localStorage.removeItem('raudhah_admin_password');
       localStorage.removeItem('raudhah_gemini_api_key');
       localStorage.removeItem('raudhah_gemini_model');
-      localStorage.removeItem('raudhah_pdf_scan_mode');
       setAdminPassword('admin123');
       setSettingsGeminiApiKey('');
       setSettingsGeminiModel('gemini-2.0-flash');
-      setSettingsPdfScanMode('auto');
     }
 
     const supabase = getSupabase();
@@ -5392,24 +5257,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Row: PDF Scan Mode Override */}
-                      <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-semibold text-slate-800 dark:text-zinc-100">Metode Pemindaian PDF</span>
-                          <p className="text-[11px] text-slate-500 dark:text-zinc-400">Pilih bagaimana sistem memproses berkas PDF Anda.</p>
-                        </div>
-                        <div className="w-full sm:w-64">
-                          <select
-                            value={settingsPdfScanMode}
-                            onChange={(e) => setSettingsPdfScanMode(e.target.value as 'auto' | 'text' | 'ocr')}
-                            className="text-xs border border-discord-onyx rounded-xl p-2 w-full outline-hidden bg-white dark:bg-discord-indigo text-slate-800 dark:text-white focus:border-discord-blurple focus:ring-2 focus:ring-discord-blurple/20 font-medium cursor-pointer transition-all"
-                          >
-                            <option value="auto">Deteksi Otomatis (Rekomendasi)</option>
-                            <option value="text">Paksa Teks Digital (Jalur A - Hemat & Instan)</option>
-                            <option value="ocr">Paksa Gambar/Scan OCR (Jalur B - Lebih Lambat tapi Akurat)</option>
-                          </select>
-                        </div>
-                      </div>
+
 
                       {/* Quota & Usage Panel */}
                       <div className="pt-4">
@@ -7010,7 +6858,7 @@ export default function App() {
                     <input
                       type="file"
                       multiple
-                      accept="image/*,application/pdf"
+                      accept="application/pdf"
                       disabled={!settingsGeminiApiKey}
                       onChange={(e) => {
                         if (e.target.files && e.target.files.length > 0) {
@@ -7030,9 +6878,9 @@ export default function App() {
                       </div>
                       <div className="space-y-1">
                         <p className="text-xs font-semibold text-slate-700 dark:text-zinc-200">
-                          <span className="text-blue-600 dark:text-blue-400 hover:underline">Klik untuk memilih berkas</span> atau seret file PDF/Foto ke sini
+                          <span className="text-blue-600 dark:text-blue-400 hover:underline">Klik untuk memilih berkas</span> atau seret berkas PDF Visa ke sini
                         </p>
-                        <p className="text-[10px] text-slate-400 dark:text-zinc-400">Mendukung format PDF, PNG, JPG, dan JPEG (Maks. 50 file, maks. 20MB per file)</p>
+                        <p className="text-[10px] text-slate-400 dark:text-zinc-400">Hanya mendukung berkas PDF Visa asli dengan teks digital (Maks. 50 file, maks. 20MB per file)</p>
                       </div>
                     </div>
                   </div>
