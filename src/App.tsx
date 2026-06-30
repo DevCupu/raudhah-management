@@ -21,6 +21,8 @@ import {
   Phone,
   Calendar,
   ChevronRight,
+  ChevronLeft,
+  History,
   ChevronDown,
   Sparkles,
   Check,
@@ -315,6 +317,10 @@ export default function App() {
   const [showBatchScanModal, setShowBatchScanModal] = useState(false);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showActivityModal, setShowActivityModal] = useState(false);
+  const [activityLog, setActivityLog] = useState<{ id: string; ts: string; actor: string; action: string; jamaahName: string; jamaahId: string }[]>(() => {
+    try { return JSON.parse(localStorage.getItem('raudhah_activity_log') || '[]'); } catch { return []; }
+  });
   const [batchScanFiles, setBatchScanFiles] = useState<File[]>([]);
   const [batchScanResults, setBatchScanResults] = useState<any[]>([]);
   const [batchScanErrors, setBatchScanErrors] = useState<{ fileName: string; error: string }[]>([]);
@@ -1393,6 +1399,36 @@ export default function App() {
     setShowEditModal(true);
   };
 
+  // Catat aktivitas (audit log) — disimpan lokal per perangkat, maks 500 entri terakhir.
+  const logActivity = (action: string, jamaah?: { id: string; name: string } | null) => {
+    const actor = activeOperatorId
+      ? (operators.find(o => o.id === activeOperatorId)?.name || 'Operator')
+      : 'Admin (Kantor Pusat)';
+    const entry = {
+      id: 'log-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      ts: new Date().toISOString(),
+      actor,
+      action,
+      jamaahName: jamaah?.name || '',
+      jamaahId: jamaah?.id || '',
+    };
+    setActivityLog(prev => {
+      const next = [entry, ...prev].slice(0, 500);
+      try { localStorage.setItem('raudhah_activity_log', JSON.stringify(next)); } catch (e) {}
+      return next;
+    });
+  };
+
+  // Navigasi cepat ke jemaah sebelumnya/berikutnya dalam daftar yang sedang tampil.
+  const goToAdjacentJamaah = (dir: 1 | -1) => {
+    if (!selectedJamaah) return;
+    const list = sortedFilteredJamaah;
+    const idx = list.findIndex(j => j.id === selectedJamaah.id);
+    const nextIdx = idx + dir;
+    if (idx === -1 || nextIdx < 0 || nextIdx >= list.length) return;
+    setSelectedJamaah(list[nextIdx]);
+  };
+
   // Salin teks ke clipboard + feedback singkat (untuk tombol copy kredensial Nusuk).
   const copyToClipboard = async (text: string, key: string) => {
     if (!text) return;
@@ -1486,6 +1522,10 @@ export default function App() {
   };
 
   const handleQuickStatusChange = (id: string, newStatus: JamaahStatus) => {
+    const target = jamaahs.find(j => j.id === id);
+    if (target && target.status !== newStatus) {
+      logActivity(`Ubah status → ${newStatus}`, target);
+    }
     setJamaahs(prev =>
       prev.map(j => {
         if (j.id === id) {
@@ -1510,6 +1550,8 @@ export default function App() {
 
   const handleAssignOperatorInDetail = (opId: string | null) => {
     if (!selectedJamaah) return;
+    const opName = opId ? (operators.find(o => o.id === opId)?.name || 'Operator') : 'Belum Ditugaskan';
+    logActivity(`Tugaskan ke operator: ${opName}`, selectedJamaah);
     setJamaahs(prev =>
       prev.map(j => {
         if (j.id === selectedJamaah.id) {
@@ -1559,7 +1601,8 @@ export default function App() {
       const rawDataUrl = event.target?.result as string;
       const compressedDataUrl = await compressImage(rawDataUrl);
       const nowStr = new Date().toISOString();
-      
+      logActivity('Unggah QR & tandai QR Berhasil', selectedJamaah);
+
       setJamaahs(prev =>
         prev.map(j => {
           if (j.id === selectedJamaah.id) {
@@ -3384,6 +3427,15 @@ export default function App() {
                   )}
                 </>
               )}
+
+              <button
+                onClick={() => setShowActivityModal(true)}
+                title="Riwayat aktivitas (audit log)"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-zinc-700 transition-all shadow-xs shrink-0"
+              >
+                <History className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Riwayat</span>
+              </button>
             </div>
           </div>
         </header>
@@ -6396,19 +6448,56 @@ export default function App() {
             </div>
 
             {/* Drawer Footer */}
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0">
-              <button
-                onClick={() => { const j = selectedJamaah; setSelectedJamaah(null); handleOpenEditModal(j); }}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors flex items-center gap-1.5"
-              >
-                <Edit className="w-3.5 h-3.5" /> Edit Data
-              </button>
-              <button
-                onClick={() => setSelectedJamaah(null)}
-                className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-xs font-semibold hover:bg-zinc-800 transition-colors"
-              >
-                Selesai & Simpan
-              </button>
+            <div className="pt-4 border-t border-slate-100 dark:border-zinc-700 flex flex-col gap-2.5 shrink-0">
+              {/* Navigasi antar jemaah */}
+              {(() => {
+                const idx = sortedFilteredJamaah.findIndex(j => j.id === selectedJamaah.id);
+                const total = sortedFilteredJamaah.length;
+                return (
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => goToAdjacentJamaah(-1)}
+                      disabled={idx <= 0}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" /> Sebelumnya
+                    </button>
+                    <span className="text-[11px] text-slate-400 dark:text-zinc-500 font-medium tabular-nums">{idx >= 0 ? idx + 1 : '-'} / {total}</span>
+                    <button
+                      onClick={() => goToAdjacentJamaah(1)}
+                      disabled={idx === -1 || idx >= total - 1}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-zinc-200 hover:bg-slate-200 dark:hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Berikutnya <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* Aksi utama */}
+              <div className="flex items-center gap-2">
+                {selectedJamaah.status !== 'QR Berhasil' && (
+                  <button
+                    onClick={() => handleQuickStatusChange(selectedJamaah.id, 'QR Berhasil')}
+                    title="Tandai jemaah ini selesai (QR sudah didistribusikan)"
+                    className="flex-1 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Check className="w-4 h-4" /> Tandai Selesai (QR Berhasil)
+                  </button>
+                )}
+                <button
+                  onClick={() => { const j = selectedJamaah; setSelectedJamaah(null); handleOpenEditModal(j); }}
+                  className="px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors flex items-center gap-1.5"
+                >
+                  <Edit className="w-3.5 h-3.5" /> Edit
+                </button>
+                <button
+                  onClick={() => setSelectedJamaah(null)}
+                  className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-semibold hover:bg-zinc-800 transition-colors"
+                >
+                  Tutup
+                </button>
+              </div>
             </div>
 
           </div>
@@ -7042,6 +7131,59 @@ export default function App() {
 
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: RIWAYAT AKTIVITAS (AUDIT LOG) */}
+      {showActivityModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-zinc-800">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/40 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-slate-800 dark:text-zinc-100 text-base flex items-center gap-2">
+                  <History className="w-5 h-5 text-blue-600" />
+                  <span>Riwayat Aktivitas</span>
+                </h3>
+                <p className="text-xs text-slate-400 dark:text-zinc-400 font-medium">Catatan tindakan terbaru (tersimpan di perangkat ini).</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {activityLog.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { if (window.confirm('Hapus seluruh riwayat aktivitas di perangkat ini?')) { setActivityLog([]); localStorage.removeItem('raudhah_activity_log'); } }}
+                    className="text-[11px] font-semibold text-red-600 hover:underline flex items-center gap-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Bersihkan
+                  </button>
+                )}
+                <button type="button" onClick={() => setShowActivityModal(false)} className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-400 transition-all">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {activityLog.length === 0 ? (
+                <div className="text-center py-12 text-sm text-slate-400">Belum ada aktivitas tercatat.</div>
+              ) : (
+                <div className="space-y-1.5">
+                  {activityLog.map(entry => (
+                    <div key={entry.id} className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-zinc-800/40 border border-slate-100 dark:border-zinc-800">
+                      <div className="w-7 h-7 shrink-0 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 flex items-center justify-center text-[10px] font-bold uppercase">
+                        {(entry.actor || '?').charAt(0)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs text-slate-800 dark:text-zinc-100">
+                          <span className="font-semibold">{entry.actor}</span> {entry.action}
+                          {entry.jamaahName && <span className="text-slate-500 dark:text-zinc-400"> — {entry.jamaahName}</span>}
+                        </div>
+                        <div className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5">{new Date(entry.ts).toLocaleString('id-ID')}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
