@@ -4287,7 +4287,7 @@ export default function App() {
                             {/* Collapsible Table Content */}
                             {isExpanded && (
                               <div className="overflow-x-auto">
-                                <table className="w-full min-w-[1040px] text-left border-collapse text-xs">
+                                <table className="w-full min-w-[820px] text-left border-collapse text-xs">
                                   <thead>
                                     <tr className="bg-slate-50 dark:bg-zinc-800/50 border-b border-slate-100 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 font-medium select-none text-xs">
                                       <th className="py-2.5 px-2 text-center w-8">
@@ -4308,10 +4308,8 @@ export default function App() {
                                         />
                                       </th>
                                       <th className="py-2.5 px-2 whitespace-nowrap">Nama Jamaah</th>
-                                      <th className="py-2.5 px-2 whitespace-nowrap">Email</th>
                                       <th className="py-2.5 px-2 whitespace-nowrap">Paspor</th>
                                       <th className="py-2.5 px-2 whitespace-nowrap">Visa</th>
-                                      <th className="py-2.5 px-2 whitespace-nowrap">Password</th>
                                       <th className="py-2.5 px-2 whitespace-nowrap">Jadwal</th>
                                       <th className="py-2.5 px-2 whitespace-nowrap">Prioritas</th>
                                       <th className="py-2.5 px-2 whitespace-nowrap">Status</th>
@@ -4387,23 +4385,10 @@ export default function App() {
 
                                           </td>
                                           <td className="py-2.5 px-2">
-                                            {j.email ? (
-                                              <span className="font-mono text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-200/60 dark:border-blue-500/20 inline-block truncate w-full align-middle leading-tight">{j.email}</span>
-                                            ) : (
-                                              <span className="text-xs text-slate-400 italic">-</span>
-                                            )}
-                                          </td>
-                                          <td className="py-2.5 px-2">
                                             <span className="font-mono font-bold text-slate-800 dark:text-zinc-100 text-xs bg-slate-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-600 inline-block truncate w-full align-middle leading-tight">{j.passport}</span>
                                           </td>
                                           <td className="py-2.5 px-2">
                                             <span className="font-mono font-medium text-slate-700 dark:text-zinc-200 text-xs bg-slate-50 dark:bg-zinc-800/50 px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-600/50 inline-block truncate w-full align-middle leading-tight">{j.visa}</span>
-                                          </td>
-                                          <td className="py-2.5 px-2">
-                                            <span className="font-mono text-xs font-semibold bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded border border-dashed border-amber-200 dark:border-amber-500/30 inline-flex items-center gap-1 truncate w-full align-middle leading-tight">
-                                              <Key className="w-3 h-3 text-amber-600 shrink-0" />
-                                              <span className="truncate">{j.password || '123456'}</span>
-                                            </span>
                                           </td>
                                           <td className="py-2.5 px-2 align-top">
                                             <div className="text-xs font-medium text-slate-700 dark:text-zinc-200 leading-tight">{formatDateLabel(j.entryMadinah)}</div>
@@ -6329,35 +6314,39 @@ export default function App() {
                       );
                     }
 
+                    // Format sisa waktu jadi "1 hari 3 jam 42 menit" yang ringkas.
+                    const fmtRemain = (mins: number) => {
+                      const totalMin = Math.max(0, Math.round(mins));
+                      const dd = Math.floor(totalMin / 1440);
+                      const hh = Math.floor((totalMin % 1440) / 60);
+                      const mm = totalMin % 60;
+                      return [dd ? `${dd} hari` : '', hh ? `${hh} jam` : '', `${mm} menit`].filter(Boolean).join(' ');
+                    };
+                    const targetWita = `${formatInZone(distInstant, TZ_WITA)} ${formatTimeColon(distInstant, TZ_WITA)} WITA`;
+
                     if (minsToDist <= 60) {
                       return (
-                        <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-150 p-2.5 rounded-lg font-bold animate-pulse flex items-center gap-1.5">
-                          <AlertTriangle className="w-4 h-4 text-rose-600" />
-                          <span>Penting: Distribusi QR dalam {Math.ceil(minsToDist)} menit!</span>
+                        <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-150 p-2.5 rounded-lg font-bold animate-pulse flex items-start gap-1.5">
+                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                          <span>Sebentar lagi! QR bisa di-download dari Nusuk dalam <span className="underline">{fmtRemain(minsToDist)}</span> (≈ {targetWita}).</span>
                         </div>
                       );
                     }
 
                     if (minsToDist <= 180) {
                       return (
-                        <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 p-2.5 rounded-lg font-semibold flex items-center gap-1.5">
-                          <Clock className="w-4 h-4 text-amber-600" />
-                          <span>Perhatian: Distribusi QR dalam {Math.floor(minsToDist / 60)} jam {Math.round(minsToDist % 60)} menit</span>
+                        <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 p-2.5 rounded-lg font-semibold flex items-start gap-1.5">
+                          <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <span>QR bisa di-download dari Nusuk dalam <span className="font-bold">{fmtRemain(minsToDist)}</span> (≈ {targetWita}).</span>
                         </div>
                       );
                     }
 
                     // Normal countdown (> 3 hours remaining until distribution)
-                    const hours = Math.floor(minsToDist / 60);
-                    const days = Math.floor(hours / 24);
-                    const remainingHours = hours % 24;
-
                     return (
-                      <div className="text-[11px] text-slate-600 dark:text-zinc-300 bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 p-2.5 rounded-lg font-medium flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        <span>
-                          Distribusi QR dalam: {days > 0 ? `${days} hari ` : ''}{remainingHours} jam {Math.round(minsToDist % 60)} menit
-                        </span>
+                      <div className="text-[11px] text-slate-600 dark:text-zinc-300 bg-slate-50 dark:bg-zinc-800/50 border border-slate-200 dark:border-zinc-700 p-2.5 rounded-lg font-medium flex items-start gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                        <span>QR bisa di-download dari Nusuk dalam <span className="font-bold text-slate-800 dark:text-zinc-100">{fmtRemain(minsToDist)}</span> lagi <span className="text-slate-400 dark:text-zinc-500">(≈ {targetWita})</span>.</span>
                       </div>
                     );
                   })()}
