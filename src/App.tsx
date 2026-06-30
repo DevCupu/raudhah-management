@@ -6349,6 +6349,12 @@ export default function App() {
             {/* Drawer Footer */}
             <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0">
               <button
+                onClick={() => { const j = selectedJamaah; setSelectedJamaah(null); handleOpenEditModal(j); }}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors flex items-center gap-1.5"
+              >
+                <Edit className="w-3.5 h-3.5" /> Edit Data
+              </button>
+              <button
                 onClick={() => setSelectedJamaah(null)}
                 className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-xs font-semibold hover:bg-zinc-800 transition-colors"
               >
@@ -6817,18 +6823,28 @@ export default function App() {
                   />
                 </div>
 
-                {/* Travel Agent */}
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 dark:text-zinc-300">Agen Travel / Rombongan *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Raudhah Al-Haramain Travel"
-                    value={editingJamaah.travel || ''}
-                    onChange={(e) => setEditingJamaah({ ...editingJamaah, travel: e.target.value.toUpperCase() })}
-                    className="w-full text-xs border border-slate-200 dark:border-zinc-600 rounded-lg p-2.5 bg-slate-50 dark:bg-zinc-700/40 outline-hidden focus:border-red-500"
-                  />
-                </div>
+                {/* Travel Agent — hanya admin/kantor pusat yang boleh mengubah nama travel */}
+                {activeOperatorId === null ? (
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-600 dark:text-zinc-300">Agen Travel / Rombongan *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Contoh: Raudhah Al-Haramain Travel"
+                      value={editingJamaah.travel || ''}
+                      onChange={(e) => setEditingJamaah({ ...editingJamaah, travel: e.target.value.toUpperCase() })}
+                      className="w-full text-xs border border-slate-200 dark:border-zinc-600 rounded-lg p-2.5 bg-slate-50 dark:bg-zinc-700/40 outline-hidden focus:border-red-500"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-600 dark:text-zinc-300">Agen Travel / Rombongan</label>
+                    <div className="w-full text-xs border border-slate-200 dark:border-zinc-700 rounded-lg p-2.5 bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 flex items-center justify-between">
+                      <span>{editingJamaah.travel || '-'}</span>
+                      <span className="text-[10px] italic">Hanya admin yang dapat mengubah</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Password */}
                 <div className="space-y-1">
