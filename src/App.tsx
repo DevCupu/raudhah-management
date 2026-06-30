@@ -42,7 +42,8 @@ import {
   Download,
   Bell,
   Activity,
-  Gauge
+  Gauge,
+  Volume2
 } from 'lucide-react';
 import { Jamaah, Operator, JamaahStatus, Gender, CustomField } from './types';
 import { getPriorityInfo, sortJamaahByPriorityAndDate } from './utils/priority';
@@ -311,6 +312,7 @@ export default function App() {
 
   // --- Batch Scan States ---
   const [showBatchScanModal, setShowBatchScanModal] = useState(false);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [batchScanFiles, setBatchScanFiles] = useState<File[]>([]);
   const [batchScanResults, setBatchScanResults] = useState<any[]>([]);
   const [batchScanErrors, setBatchScanErrors] = useState<{ fileName: string; error: string }[]>([]);
@@ -400,6 +402,35 @@ export default function App() {
     const saved = localStorage.getItem('raudhah_qr_lead_hours');
     return saved ? parseFloat(saved) : 2;
   });
+  const [settingsEnableSound, setSettingsEnableSound] = useState(() => {
+    return localStorage.getItem('raudhah_enable_sound') !== 'false';
+  });
+
+  // Synthesizes a pleasant double-chime tone (E5 -> A5) using Web Audio API (no asset dependencies)
+  const playNotificationSound = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const playTone = (freq: number, start: number, duration: number) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.15, start + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(start);
+        osc.stop(start + duration);
+      };
+      const t = audioCtx.currentTime;
+      playTone(659.25, t, 0.4); // E5
+      playTone(880.00, t + 0.12, 0.6); // A5
+    } catch (err) {
+      console.warn('Failed to play notification sound:', err);
+    }
+  };
+
   // Live clock: one ticking Date drives both Madinah (GMT+3) and Indonesia/WITA (GMT+8) displays.
   // Both are the same instant — only the timezone label differs, so they can never drift apart (selisih tetap 5 jam).
   const [now, setNow] = useState(() => new Date());
@@ -409,17 +440,40 @@ export default function App() {
   }, []);
   // Tracks which QR-distribution reminders have already fired (key: jamaahId|slot) so we notify once.
   const notifiedDistRef = useRef<Set<string>>(new Set());
+  const isInitializedRef = useRef(false);
+
   // Ask for browser notification permission once (best-effort; ignored if unsupported/denied).
   useEffect(() => {
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {});
     }
   }, []);
-  // Fire a browser notification when a jamaah's QR-distribution time arrives (slot − lead hours),
+
+  // Fire a browser notification & play sound when a jamaah's QR-distribution time arrives (slot − lead hours),
   // and the Raudhah slot hasn't passed yet. Driven by the 1s clock tick.
   useEffect(() => {
-    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    if (!isDbLoaded) return;
     const t = now.getTime();
+
+    // Silently register currently urgent slots at startup to prevent mass alerting on load
+    if (!isInitializedRef.current) {
+      jamaahs.forEach(j => {
+        if (!j.raudhahSlot || j.status === 'QR Berhasil') return;
+        const dist = getDistributionInstant(j.raudhahSlot, settingsQrLeadHours);
+        const slot = getDistributionInstant(j.raudhahSlot, 0);
+        if (!dist || !slot) return;
+        const minsToDist = (dist.getTime() - t) / 60000;
+        const minsToSlot = (slot.getTime() - t) / 60000;
+        if (minsToDist <= 0 && minsToSlot > 0) {
+          const key = `${j.id}|${j.raudhahSlot}`;
+          notifiedDistRef.current.add(key);
+        }
+      });
+      isInitializedRef.current = true;
+      return;
+    }
+
+    let shouldPlaySound = false;
     jamaahs.forEach(j => {
       if (!j.raudhahSlot || j.status === 'QR Berhasil') return;
       const dist = getDistributionInstant(j.raudhahSlot, settingsQrLeadHours);
@@ -428,18 +482,27 @@ export default function App() {
       const minsToDist = (dist.getTime() - t) / 60000;
       const minsToSlot = (slot.getTime() - t) / 60000;
       const key = `${j.id}|${j.raudhahSlot}`;
+      
       // Distribution window is open (reached, slot not yet passed) and we haven't notified for it.
       if (minsToDist <= 0 && minsToSlot > 0 && !notifiedDistRef.current.has(key)) {
         notifiedDistRef.current.add(key);
-        try {
-          new Notification('Waktunya Distribusi QR Raudhah', {
-            body: `${j.name} — masuk Nusuk, download & berikan QR sekarang. Slot Raudhah ${formatInZone(slot, TZ_WITA)} WITA (${formatInZone(slot, TZ_MADINAH)} Madinah).`,
-            tag: key,
-          });
-        } catch { /* notification may be blocked; ignore */ }
+        shouldPlaySound = true;
+        
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          try {
+            new Notification('Waktunya Distribusi QR Raudhah', {
+              body: `${j.name} — masuk Nusuk, download & berikan QR sekarang. Slot Raudhah ${formatInZone(slot, TZ_WITA)} WITA (${formatInZone(slot, TZ_MADINAH)} Madinah).`,
+              tag: key,
+            });
+          } catch { /* notification may be blocked; ignore */ }
+        }
       }
     });
-  }, [now, jamaahs, settingsQrLeadHours]);
+
+    if (shouldPlaySound && settingsEnableSound) {
+      playNotificationSound();
+    }
+  }, [now, jamaahs, settingsQrLeadHours, isDbLoaded, settingsEnableSound]);
   const [settingsReferenceDate, setSettingsReferenceDate] = useState(() => {
     const saved = localStorage.getItem('raudhah_reference_date');
     if (saved) return saved;
@@ -709,6 +772,10 @@ export default function App() {
             if (s.key === 'default_password') setSettingsDefaultPassword(prev => prev !== s.value ? s.value : prev);
             if (s.key === 'default_raudhah_slot') setSettingsDefaultRaudhahSlot(prev => prev !== s.value ? s.value : prev);
             if (s.key === 'admin_password') setAdminPassword(prev => prev !== s.value ? s.value : prev);
+            if (s.key === 'enable_sound') setSettingsEnableSound(prev => {
+              const val = s.value !== 'false';
+              return prev !== val ? val : prev;
+            });
           });
         }
 
@@ -823,6 +890,10 @@ export default function App() {
                 if (key === 'default_password') setSettingsDefaultPassword(prev => prev !== value ? value : prev);
                 if (key === 'default_raudhah_slot') setSettingsDefaultRaudhahSlot(prev => prev !== value ? value : prev);
                 if (key === 'admin_password') setAdminPassword(prev => prev !== value ? value : prev);
+                if (key === 'enable_sound') setSettingsEnableSound(prev => {
+                  const val = value !== 'false';
+                  return prev !== val ? val : prev;
+                });
               }
             }
           )
@@ -868,6 +939,11 @@ export default function App() {
     localStorage.setItem('raudhah_qr_lead_hours', String(settingsQrLeadHours));
     updateSettingInSupabase('qr_lead_hours', String(settingsQrLeadHours));
   }, [settingsQrLeadHours]);
+
+  useEffect(() => {
+    localStorage.setItem('raudhah_enable_sound', String(settingsEnableSound));
+    updateSettingInSupabase('enable_sound', String(settingsEnableSound));
+  }, [settingsEnableSound]);
 
   useEffect(() => {
     localStorage.setItem('raudhah_admin_password', adminPassword);
@@ -1167,6 +1243,36 @@ export default function App() {
 
   // Sort by priority first
   const sortedFilteredJamaah = [...filteredJamaah].sort((a, b) => sortJamaahByPriorityAndDate(a, b, settingsReferenceDate));
+
+  // --- Deteksi duplikat di SELURUH data jemaah (paspor ATAU visa sama) ---
+  // Union-find: dua jemaah terhubung jika berbagi paspor atau nomor visa (non-kosong).
+  const { duplicateGroups, duplicateIds } = (() => {
+    const parent: Record<string, string> = {};
+    const find = (x: string): string => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+    const union = (a: string, b: string) => { parent[find(a)] = find(b); };
+    jamaahs.forEach(j => { parent[j.id] = j.id; });
+    const keyOwner: Record<string, string> = {};
+    jamaahs.forEach(j => {
+      const keys: string[] = [];
+      const p = (j.passport || '').trim().toUpperCase();
+      const v = (j.visa || '').trim().toUpperCase();
+      if (p) keys.push('P:' + p);
+      if (v) keys.push('V:' + v);
+      keys.forEach(k => {
+        if (keyOwner[k]) union(j.id, keyOwner[k]);
+        else keyOwner[k] = j.id;
+      });
+    });
+    const groupsMap: Record<string, Jamaah[]> = {};
+    jamaahs.forEach(j => {
+      const root = find(j.id);
+      (groupsMap[root] = groupsMap[root] || []).push(j);
+    });
+    const groups = Object.values(groupsMap).filter(g => g.length > 1);
+    const ids = new Set<string>();
+    groups.forEach(g => g.forEach(j => ids.add(j.id)));
+    return { duplicateGroups: groups, duplicateIds: ids };
+  })();
 
   // High priority list (H-1 and H-2 s/d H-4) for quick action panel on dashboard
   const highPriorityList = jamaahs
@@ -2979,9 +3085,11 @@ export default function App() {
       localStorage.removeItem('raudhah_custom_fields');
       localStorage.removeItem('raudhah_default_password');
       localStorage.removeItem('raudhah_default_raudhah_slot');
+      localStorage.removeItem('raudhah_enable_sound');
 
       setSettingsDefaultPassword(DEFAULT_JAMAAH_PASSWORD);
       setSettingsDefaultRaudhahSlot('');
+      setSettingsEnableSound(true);
       setCustomFields([]);
       setSettingsExportColumns({
         name: true,
@@ -3252,6 +3360,17 @@ export default function App() {
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>Scan Massal Visa (PDF)</span>
                   </button>
+
+                  {duplicateIds.size > 0 && (
+                    <button
+                      onClick={() => setShowDuplicateModal(true)}
+                      title="Ada data jemaah dengan paspor/visa sama"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-all shadow-xs shrink-0 animate-pulse"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>Duplikat ({duplicateGroups.length})</span>
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -4104,6 +4223,17 @@ export default function App() {
                                                  }`}>
                                                     {j.gender === 'Perempuan' ? '♀ Perempuan' : '♂ Laki-laki'}
                                                  </span>
+                                               )}
+                                               {duplicateIds.has(j.id) && (
+                                                 <button
+                                                   type="button"
+                                                   onClick={(e) => { e.stopPropagation(); setShowDuplicateModal(true); }}
+                                                   title="Paspor/Visa sama dengan jemaah lain — klik untuk membersihkan"
+                                                   className="text-[8px] text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/25 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5 shrink-0 leading-none hover:bg-amber-200 transition-colors"
+                                                 >
+                                                   <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                                                   <span>Duplikat</span>
+                                                 </button>
                                                )}
                                                {isUrgent && (
                                                  <span className="text-[8px] text-rose-800 dark:text-rose-300 bg-rose-100 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/25 px-1.5 py-0.5 rounded font-bold animate-pulse flex items-center gap-0.5 shrink-0 leading-none">
@@ -5051,6 +5181,54 @@ export default function App() {
                           onChange={(e) => setSettingsQrLeadHours(Math.max(0, parseFloat(e.target.value) || 0))}
                           className="text-xs border border-slate-200 dark:border-discord-onyx rounded-xl p-2 w-full sm:w-64 bg-white dark:bg-discord-indigo text-slate-800 dark:text-white outline-hidden focus:border-discord-blurple focus:ring-2 focus:ring-discord-blurple/20 transition-all"
                         />
+                      </div>
+
+                      {/* Row: Notifikasi & Suara Alarm */}
+                      <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-100 dark:border-zinc-800">
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-semibold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5">
+                            <Volume2 className="w-3.5 h-3.5 text-blue-500" />
+                            Notifikasi &amp; Suara Alarm Raudhah
+                          </span>
+                          <p className="text-[11px] text-slate-500 dark:text-zinc-400">Mainkan suara alarm dan tampilkan pemberitahuan browser saat jeda waktu distribusi tiba.</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          {/* Test Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              playNotificationSound();
+                              if (typeof Notification !== 'undefined') {
+                                Notification.requestPermission().then(permission => {
+                                  if (permission === 'granted') {
+                                    new Notification('Uji Coba Notifikasi Raudhah', {
+                                      body: 'Suara alarm & pemberitahuan berhasil diaktifkan!',
+                                    });
+                                  } else {
+                                    alert('Izin notifikasi diblokir oleh browser. Harap aktifkan di pengaturan browser Anda.');
+                                  }
+                                });
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 text-[10px] font-semibold hover:bg-slate-100 dark:hover:bg-zinc-700 transition-all cursor-pointer"
+                          >
+                            🔔 Uji Coba Suara &amp; Pop-up
+                          </button>
+
+                          {/* Toggle Switch */}
+                          <label className="relative inline-flex items-center cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={settingsEnableSound}
+                              onChange={(e) => setSettingsEnableSound(e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-slate-200 dark:bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                            <span className="ml-2 text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                              {settingsEnableSound ? 'Suara Aktif' : 'Suara Senyap'}
+                            </span>
+                          </label>
+                        </div>
                       </div>
 
                       {/* Row: Default Slot Jadwal Raudhah */}
@@ -6742,6 +6920,86 @@ export default function App() {
 
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DETEKSI & BERSIHKAN DUPLIKAT */}
+      {showDuplicateModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-zinc-800">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-zinc-800 bg-amber-50 dark:bg-amber-950/20 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-amber-800 dark:text-amber-300 text-base flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5" />
+                  <span>Deteksi & Bersihkan Duplikat</span>
+                </h3>
+                <p className="text-xs text-amber-700/80 dark:text-amber-400/70 font-medium">
+                  Jemaah dengan Nomor Paspor atau Visa yang sama. Pertahankan satu, hapus sisanya.
+                </p>
+              </div>
+              <button type="button" onClick={() => setShowDuplicateModal(false)} className="p-1.5 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 text-amber-500 transition-all">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {duplicateGroups.length === 0 ? (
+                <div className="text-center py-12 space-y-3">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-500 flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="w-7 h-7" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-700 dark:text-zinc-200">Tidak ada duplikat 🎉</p>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">Semua data jemaah memiliki Paspor & Visa yang unik.</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    Ditemukan <strong className="text-amber-600">{duplicateGroups.length} grup duplikat</strong> ({duplicateIds.size} data). Klik <strong>Hapus</strong> pada data yang ingin dibuang.
+                  </p>
+                  {duplicateGroups.map((group, gi) => (
+                    <div key={gi} className="border border-amber-200 dark:border-amber-900/40 rounded-xl overflow-hidden">
+                      <div className="px-3 py-2 bg-amber-50/60 dark:bg-amber-950/10 text-[11px] font-bold text-amber-700 dark:text-amber-400 border-b border-amber-100 dark:border-amber-900/30">
+                        Grup #{gi + 1} — {group.length} data sama
+                      </div>
+                      <div className="divide-y divide-slate-100 dark:divide-zinc-800">
+                        {group.map((j, ji) => (
+                          <div key={j.id} className="flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-zinc-800/40">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-semibold text-slate-800 dark:text-zinc-100 truncate">
+                                {j.name || <span className="text-red-500 italic">[Tanpa Nama]</span>}
+                                {ji === 0 && <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">disarankan disimpan</span>}
+                              </div>
+                              <div className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono flex flex-wrap gap-x-3">
+                                <span>Paspor: {j.passport || '-'}</span>
+                                <span>Visa: {j.visa || '-'}</span>
+                                <span className="truncate">Travel: {j.travel || '-'}</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteJamaah(j.id)}
+                              className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/30 dark:hover:bg-red-950/50 dark:text-red-400 text-[11px] font-semibold transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Hapus
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-3 border-t border-slate-100 dark:border-zinc-800 flex justify-end">
+              <button type="button" onClick={() => setShowDuplicateModal(false)} className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-xs font-semibold hover:bg-zinc-800 transition-colors">
+                Selesai
+              </button>
+            </div>
           </div>
         </div>
       )}
