@@ -981,13 +981,11 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('raudhah_supabase_url', settingsSupabaseUrl);
-    initSupabaseClient(settingsSupabaseUrl, settingsSupabaseAnonKey);
-  }, [settingsSupabaseUrl, settingsSupabaseAnonKey]);
+  }, [settingsSupabaseUrl]);
 
   useEffect(() => {
     localStorage.setItem('raudhah_supabase_anon_key', settingsSupabaseAnonKey);
-    initSupabaseClient(settingsSupabaseUrl, settingsSupabaseAnonKey);
-  }, [settingsSupabaseUrl, settingsSupabaseAnonKey]);
+  }, [settingsSupabaseAnonKey]);
 
 
   // Reset pagination to first page whenever filters/search change

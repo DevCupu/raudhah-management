@@ -2,6 +2,8 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Dynamic connection initialization
 let supabaseInstance: SupabaseClient | null = null;
+let lastUrl = '';
+let lastKey = '';
 
 export const getSupabaseConfig = () => {
   const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
@@ -27,7 +29,13 @@ export const initSupabaseClient = (customUrl?: string, customKey?: string): Supa
     return null;
   }
 
+  if (supabaseInstance && finalUrl === lastUrl && finalKey === lastKey) {
+    return supabaseInstance;
+  }
+
   try {
+    lastUrl = finalUrl;
+    lastKey = finalKey;
     supabaseInstance = createClient(finalUrl, finalKey, {
       auth: {
         persistSession: false
