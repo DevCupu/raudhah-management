@@ -1,6 +1,6 @@
 export type Gender = 'Laki-laki' | 'Perempuan';
 
-export type JamaahStatus = 'Ready' | 'Sedang War' | 'QR Berhasil' | 'Belum Berhasil';
+export type JamaahStatus = 'Ready' | 'Sedang War' | 'QR Berhasil' | 'QR Terdistribusi' | 'Belum Berhasil' | 'Visa Tidak Tersedia';
 
 export interface CustomField {
   id: string;

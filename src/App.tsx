@@ -203,8 +203,8 @@ const getQrReminder = (
   const minsToSlot = (slot.getTime() - nowMs) / 60000;
   let tone: QrReminderTone;
   let countdownLabel: string;
-  if (status === 'QR Berhasil') {
-    tone = 'done'; countdownLabel = 'QR sudah siap';
+  if (status === 'QR Berhasil' || status === 'QR Terdistribusi') {
+    tone = 'done'; countdownLabel = status === 'QR Terdistribusi' ? 'QR terdistribusi' : 'QR sudah siap';
   } else if (minsToSlot <= 0) {
     tone = 'past'; countdownLabel = 'Slot Raudhah terlewat';
   } else if (minsToDist <= 0) {
@@ -467,7 +467,7 @@ export default function App() {
     // Silently register currently urgent slots at startup to prevent mass alerting on load
     if (!isInitializedRef.current) {
       jamaahs.forEach(j => {
-        if (!j.raudhahSlot || j.status === 'QR Berhasil') return;
+        if (!j.raudhahSlot || j.status === 'QR Berhasil' || j.status === 'QR Terdistribusi') return;
         const dist = getDistributionInstant(j.raudhahSlot, settingsQrLeadHours);
         const slot = getDistributionInstant(j.raudhahSlot, 0);
         if (!dist || !slot) return;
@@ -484,7 +484,7 @@ export default function App() {
 
     let shouldPlaySound = false;
     jamaahs.forEach(j => {
-      if (!j.raudhahSlot || j.status === 'QR Berhasil') return;
+      if (!j.raudhahSlot || j.status === 'QR Berhasil' || j.status === 'QR Terdistribusi') return;
       const dist = getDistributionInstant(j.raudhahSlot, settingsQrLeadHours);
       const slot = getDistributionInstant(j.raudhahSlot, 0);
       if (!dist || !slot) return;
@@ -1300,7 +1300,7 @@ export default function App() {
       // If operator simulation, only their assigned items
       if (activeOperatorId && j.operatorId !== activeOperatorId) return false;
       const prio = getPriorityInfo(j.entryMadinah, settingsReferenceDate);
-      return (prio.level === 'Tinggi' || prio.level === 'Sedang') && j.status !== 'QR Berhasil';
+      return (prio.level === 'Tinggi' || prio.level === 'Sedang') && j.status !== 'QR Berhasil' && j.status !== 'QR Terdistribusi';
     })
     .sort((a, b) => sortJamaahByPriorityAndDate(a, b, settingsReferenceDate));
 
@@ -3613,7 +3613,7 @@ export default function App() {
                                   <tbody className="divide-y divide-slate-100 dark:divide-zinc-700 text-slate-700 dark:text-zinc-200 dark:text-zinc-200">
                                     {list.map(j => {
                                       const isUrgent = (() => {
-                                        if (!j.raudhahSlot || j.status === 'QR Berhasil') return false;
+                                        if (!j.raudhahSlot || j.status === 'QR Berhasil' || j.status === 'QR Terdistribusi') return false;
                                         const dist = getDistributionInstant(j.raudhahSlot, settingsQrLeadHours);
                                         const slot = getDistributionInstant(j.raudhahSlot, 0);
                                         if (!dist || !slot) return false;
@@ -3636,7 +3636,7 @@ export default function App() {
                                                   <span>Raudhah &lt; 1 Jam!</span>
                                                 </span>
                                               )}
-                                              {!isUrgent && j.status !== 'QR Berhasil' && (
+                                              {!isUrgent && j.status !== 'QR Berhasil' && j.status !== 'QR Terdistribusi' && (
                                                 <span className="text-[8px] text-rose-700 bg-rose-50 border border-rose-100 px-1 py-0.2 rounded font-bold animate-pulse flex items-center gap-0.5">
                                                   <AlertTriangle className="w-2.5 h-2.5 text-rose-600" />
                                                   <span>Belum QR</span>
@@ -3680,13 +3680,17 @@ export default function App() {
                                                 j.status === 'Ready' ? 'bg-slate-100 dark:bg-zinc-700 border-slate-200 dark:border-zinc-600 text-slate-700 dark:text-zinc-200' :
                                                 j.status === 'Sedang War' ? 'bg-amber-50 border-amber-200 text-amber-700' :
                                                 j.status === 'QR Berhasil' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                                                j.status === 'QR Terdistribusi' ? 'bg-teal-50 border-teal-200 text-teal-700' :
+                                                j.status === 'Visa Tidak Tersedia' ? 'bg-orange-50 border-orange-200 text-orange-700' :
                                                 'bg-rose-50 border-rose-200 text-rose-700'
                                               }`}
                                             >
                                               <option value="Ready">Ready</option>
                                               <option value="Sedang War">Sedang War</option>
                                               <option value="QR Berhasil">QR Berhasil</option>
+                                              <option value="QR Terdistribusi">QR Terdistribusi</option>
                                               <option value="Belum Berhasil">Belum Berhasil</option>
+                                              <option value="Visa Tidak Tersedia">Visa Tidak Tersedia</option>
                                             </select>
                                           </td>
                                           <td className="py-2 px-3" onClick={(e) => e.stopPropagation()}>
@@ -3792,7 +3796,7 @@ export default function App() {
                       <div className="space-y-1.5">
                         {operators.map(op => {
                           const assigned = jamaahs.filter(j => j.operatorId === op.id);
-                          const successCount = assigned.filter(j => j.status === 'QR Berhasil').length;
+                          const successCount = assigned.filter(j => (j.status === 'QR Berhasil' || j.status === 'QR Terdistribusi')).length;
                           const progressPercent = assigned.length > 0 ? Math.round((successCount / assigned.length) * 100) : 0;
                           return (
                             <div key={op.id} className="text-xs flex items-center justify-between py-1 border-b border-slate-50 last:border-0">
@@ -3885,7 +3889,9 @@ export default function App() {
                       <option value="Ready">Ready</option>
                       <option value="Sedang War">Sedang War</option>
                       <option value="QR Berhasil">QR Berhasil</option>
+                      <option value="QR Terdistribusi">QR Terdistribusi</option>
                       <option value="Belum Berhasil">Belum Berhasil</option>
+                      <option value="Visa Tidak Tersedia">Visa Tidak Tersedia</option>
                     </select>
                   </div>
 
@@ -4025,7 +4031,9 @@ export default function App() {
                     'Ready': 'bg-slate-100 text-slate-600 dark:bg-zinc-700 dark:text-zinc-300',
                     'Sedang War': 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
                     'QR Berhasil': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+                    'QR Terdistribusi': 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
                     'Belum Berhasil': 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
+                    'Visa Tidak Tersedia': 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
                   };
                   return (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -4185,7 +4193,7 @@ export default function App() {
                         // Status stats
                         const readyCount = list.filter(j => j.status === 'Ready').length;
                         const warCount = list.filter(j => j.status === 'Sedang War').length;
-                        const successCount = list.filter(j => j.status === 'QR Berhasil').length;
+                        const successCount = list.filter(j => (j.status === 'QR Berhasil' || j.status === 'QR Terdistribusi')).length;
                         const failCount = list.filter(j => j.status === 'Belum Berhasil').length;
 
                         return (
@@ -4306,7 +4314,7 @@ export default function App() {
                                     {list.map(j => {
                                        const prio = getPriorityInfo(j.entryMadinah, settingsReferenceDate);
                                        const isUrgent = (() => {
-                                         if (!j.raudhahSlot || j.status === 'QR Berhasil') return false;
+                                         if (!j.raudhahSlot || j.status === 'QR Berhasil' || j.status === 'QR Terdistribusi') return false;
                                          const dist = getDistributionInstant(j.raudhahSlot, settingsQrLeadHours);
                                          const slot = getDistributionInstant(j.raudhahSlot, 0);
                                          if (!dist || !slot) return false;
@@ -4422,6 +4430,8 @@ export default function App() {
                                               j.status === 'Ready' ? 'bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-600/50' :
                                               j.status === 'Sedang War' ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-200/30 dark:border-amber-500/20' :
                                               j.status === 'QR Berhasil' ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-200/30 dark:border-emerald-500/20' :
+                                              j.status === 'QR Terdistribusi' ? 'bg-teal-100 dark:bg-teal-500/15 text-teal-800 dark:text-teal-300 border border-teal-200/30 dark:border-teal-500/20' :
+                                              j.status === 'Visa Tidak Tersedia' ? 'bg-orange-100 dark:bg-orange-500/15 text-orange-800 dark:text-orange-300 border border-orange-200/30 dark:border-orange-500/20' :
                                               'bg-rose-100 dark:bg-rose-500/15 text-rose-800 dark:text-rose-300 border border-rose-200/30 dark:border-rose-500/20'
                                             }`}>
                                               {j.status === 'Ready' && (
@@ -4433,8 +4443,14 @@ export default function App() {
                                               {j.status === 'QR Berhasil' && (
                                                 <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> OK</>
                                               )}
+                                              {j.status === 'QR Terdistribusi' && (
+                                                <><span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span> Selesai</>
+                                              )}
                                               {j.status === 'Belum Berhasil' && (
                                                 <><span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Gagal</>
+                                              )}
+                                              {j.status === 'Visa Tidak Tersedia' && (
+                                                <><span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span> No Visa</>
                                               )}
                                             </span>
                                           </td>
@@ -5001,7 +5017,7 @@ export default function App() {
                   <div className="divide-y divide-slate-100 mt-2">
                     {operators.map(op => {
                       const assignedJamaahs = jamaahs.filter(j => j.operatorId === op.id);
-                      const pendingCount = assignedJamaahs.filter(j => j.status !== 'QR Berhasil').length;
+                      const pendingCount = assignedJamaahs.filter(j => j.status !== 'QR Berhasil' && j.status !== 'QR Terdistribusi').length;
                       return (
                         <div key={op.id} className="py-4 flex items-center justify-between gap-4">
                           <div className="space-y-1">
@@ -6245,11 +6261,12 @@ export default function App() {
                   })()}
 
                   {(() => {
-                    if (selectedJamaah.status === 'QR Berhasil') {
+                    if (selectedJamaah.status === 'QR Berhasil' || selectedJamaah.status === 'QR Terdistribusi') {
+                      const distributed = selectedJamaah.status === 'QR Terdistribusi';
                       return (
-                        <div className="text-[11px] text-emerald-700 bg-emerald-50/50 border border-emerald-100 p-2.5 rounded-lg font-semibold flex items-center gap-1.5">
-                          <Check className="w-4 h-4 text-emerald-600" />
-                          <span>Barcode Raudhah Sudah Siap & Terunggah</span>
+                        <div className={`text-[11px] p-2.5 rounded-lg font-semibold flex items-center gap-1.5 ${distributed ? 'text-teal-700 bg-teal-50/60 border border-teal-100' : 'text-emerald-700 bg-emerald-50/50 border border-emerald-100'}`}>
+                          <Check className={`w-4 h-4 ${distributed ? 'text-teal-600' : 'text-emerald-600'}`} />
+                          <span>{distributed ? 'QR Sudah Didistribusikan ke Jemaah (Selesai)' : 'Barcode Raudhah Sudah Siap & Terunggah'}</span>
                         </div>
                       );
                     }
@@ -6348,7 +6365,9 @@ export default function App() {
                     <option value="Ready">Ready (Menunggu antrean)</option>
                     <option value="Sedang War">Sedang War (Nusuk sedang diproses)</option>
                     <option value="QR Berhasil">QR Berhasil (Barcode sukses diterbitkan)</option>
+                    <option value="QR Terdistribusi">QR Terdistribusi (Sudah dibagikan ke jemaah, selesai)</option>
                     <option value="Belum Berhasil">Belum Berhasil (Quota limit/eror Nusuk)</option>
+                    <option value="Visa Tidak Tersedia">Visa Tidak Tersedia</option>
                   </select>
                 </div>
 
@@ -6476,13 +6495,13 @@ export default function App() {
 
               {/* Aksi utama */}
               <div className="flex items-center gap-2">
-                {selectedJamaah.status !== 'QR Berhasil' && (
+                {selectedJamaah.status !== 'QR Terdistribusi' && (
                   <button
-                    onClick={() => handleQuickStatusChange(selectedJamaah.id, 'QR Berhasil')}
-                    title="Tandai jemaah ini selesai (QR sudah didistribusikan)"
-                    className="flex-1 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+                    onClick={() => handleQuickStatusChange(selectedJamaah.id, 'QR Terdistribusi')}
+                    title="Tandai jemaah ini selesai — QR sudah didistribusikan ke jemaah"
+                    className="flex-1 px-3 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <Check className="w-4 h-4" /> Tandai Selesai (QR Berhasil)
+                    <Check className="w-4 h-4" /> Selesai Distribusi QR
                   </button>
                 )}
                 <button
