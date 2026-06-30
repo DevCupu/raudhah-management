@@ -1048,6 +1048,17 @@ export default function App() {
     }
   };
 
+  // Jaga statistik import (total/valid/duplikat/tidak lengkap) selalu sinkron dgn previewRows.
+  // WAJIB di atas early-return `if (!isLoggedIn)` agar urutan hooks konsisten saat login/logout.
+  useEffect(() => {
+    setImportStats({
+      total: previewRows.length,
+      valid: previewRows.filter(r => r.status === 'Valid').length,
+      duplicate: previewRows.filter(r => r.status === 'Duplikat').length,
+      incomplete: previewRows.filter(r => r.status === 'Tidak Lengkap').length,
+    });
+  }, [previewRows]);
+
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen flex antialiased overflow-hidden bg-zinc-950 selection:bg-red-100 selection:text-red-900">
@@ -2100,16 +2111,6 @@ export default function App() {
       })
     );
   };
-
-  // Jaga statistik import (total/valid/duplikat/tidak lengkap) selalu sinkron dgn previewRows.
-  useEffect(() => {
-    setImportStats({
-      total: previewRows.length,
-      valid: previewRows.filter(r => r.status === 'Valid').length,
-      duplicate: previewRows.filter(r => r.status === 'Duplikat').length,
-      incomplete: previewRows.filter(r => r.status === 'Tidak Lengkap').length,
-    });
-  }, [previewRows]);
 
   const executeImport = (specificTravel?: string) => {
     // Only import 'Valid' rows. 'Duplikat' and 'Tidak Lengkap' rows are strictly BLOCKED.
