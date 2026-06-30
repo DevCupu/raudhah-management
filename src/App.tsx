@@ -4287,7 +4287,7 @@ export default function App() {
                             {/* Collapsible Table Content */}
                             {isExpanded && (
                               <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse text-xs">
+                                <table className="w-full min-w-[1040px] text-left border-collapse text-xs">
                                   <thead>
                                     <tr className="bg-slate-50 dark:bg-zinc-800/50 border-b border-slate-100 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 font-medium select-none text-xs">
                                       <th className="py-2.5 px-2 text-center w-8">
@@ -4779,7 +4779,7 @@ export default function App() {
 
                           {/* Group Table */}
                           <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs border-collapse">
+                            <table className="w-full min-w-[920px] text-left text-xs border-collapse">
                               <thead>
                                 <tr className="bg-white dark:bg-zinc-800 border-b border-slate-100 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 font-medium">
                                   <th className="py-2.5 px-4">Nama Jamaah</th>
