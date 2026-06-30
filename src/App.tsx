@@ -3942,6 +3942,66 @@ export default function App() {
                 const pageEnd = Math.min(pageStart + jamaahPageSize, totalItems);
                 const pageJamaah = sortedFilteredJamaah.slice(pageStart, pageEnd);
 
+                // === TAMPILAN OPERATOR: kartu mobile-friendly (tanpa tabel) ===
+                // Operator tidak butuh edit travel / tabel — cukup daftar kartu yang
+                // bisa diklik untuk membuka halaman detail jemaah.
+                if (activeOperatorId !== null) {
+                  // Operator: tampilkan SEMUA jemaah yang ditugaskan (tanpa paginasi tabel admin).
+                  const operatorJamaah = sortedFilteredJamaah;
+                  if (operatorJamaah.length === 0) {
+                    return (
+                      <div className="bg-white dark:bg-zinc-800 border border-slate-100 dark:border-zinc-700 rounded-xl shadow-xs p-12 text-center text-slate-400">
+                        Tidak ada data jamaah yang ditugaskan kepada Anda.
+                      </div>
+                    );
+                  }
+                  const statusStyle: Record<string, string> = {
+                    'Ready': 'bg-slate-100 text-slate-600 dark:bg-zinc-700 dark:text-zinc-300',
+                    'Sedang War': 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+                    'QR Berhasil': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+                    'Belum Berhasil': 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
+                  };
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {operatorJamaah.map(j => {
+                        const prio = getPriorityInfo(j.entryMadinah, settingsReferenceDate);
+                        return (
+                          <button
+                            key={j.id}
+                            onClick={() => setSelectedJamaah(j)}
+                            className="text-left bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl p-4 shadow-3xs hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700/50 active:scale-[0.99] transition-all cursor-pointer flex flex-col gap-2.5"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="font-bold text-sm text-slate-800 dark:text-zinc-100 leading-tight">{j.name || '[Tanpa Nama]'}</span>
+                              <span className={`shrink-0 text-[10px] px-2 py-0.5 rounded-full font-semibold ${statusStyle[j.status] || statusStyle['Ready']}`}>
+                                {j.status}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                              {j.gender && (
+                                <span className={`px-1.5 py-0.5 rounded font-medium ${j.gender === 'Perempuan' ? 'bg-pink-50 text-pink-700 dark:bg-pink-500/15 dark:text-pink-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300'}`}>
+                                  {j.gender === 'Perempuan' ? '♀' : '♂'} {j.gender}
+                                </span>
+                              )}
+                              <span className={`px-1.5 py-0.5 rounded font-semibold ${prio.badgeColor}`}>Prioritas {prio.level}</span>
+                              {j.qrCodeUrl
+                                ? <span className="px-1.5 py-0.5 rounded font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">QR ✓</span>
+                                : <span className="px-1.5 py-0.5 rounded font-medium bg-slate-100 text-slate-500 dark:bg-zinc-700 dark:text-zinc-400">Belum QR</span>}
+                            </div>
+                            <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400 pt-1 border-t border-slate-100 dark:border-zinc-700/60">
+                              <span className="font-mono">{j.passport || '—'}</span>
+                              <span>Masuk: {j.entryMadinah ? formatDateLabel(j.entryMadinah) : '—'}</span>
+                            </div>
+                            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
+                              Lihat detail →
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                }
+
                 const jamaahsByTravel = pageJamaah.reduce((acc: { [key: string]: Jamaah[] }, j) => {
                   const travelName = j.travel || settingsTravelName;
                   if (!acc[travelName]) acc[travelName] = [];
