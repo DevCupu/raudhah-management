@@ -321,6 +321,10 @@ export default function App() {
   const [activityLog, setActivityLog] = useState<{ id: string; ts: string; actor: string; action: string; jamaahName: string; jamaahId: string }[]>(() => {
     try { return JSON.parse(localStorage.getItem('raudhah_activity_log') || '[]'); } catch { return []; }
   });
+  const [settingsUiScale, setSettingsUiScale] = useState<number>(() => {
+    const v = parseFloat(localStorage.getItem('raudhah_ui_scale') || '');
+    return !isNaN(v) && v > 0 ? v : 0.9;
+  });
   const [batchScanFiles, setBatchScanFiles] = useState<File[]>([]);
   const [batchScanResults, setBatchScanResults] = useState<any[]>([]);
   const [batchScanErrors, setBatchScanErrors] = useState<{ fileName: string; error: string }[]>([]);
@@ -1055,6 +1059,12 @@ export default function App() {
       }
     }
   };
+
+  // Terapkan & simpan skala UI per-perangkat (zoom pada <html>).
+  useEffect(() => {
+    document.documentElement.style.zoom = String(settingsUiScale);
+    localStorage.setItem('raudhah_ui_scale', String(settingsUiScale));
+  }, [settingsUiScale]);
 
   // Jaga statistik import (total/valid/duplikat/tidak lengkap) selalu sinkron dgn previewRows.
   // WAJIB di atas early-return `if (!isLoggedIn)` agar urutan hooks konsisten saat login/logout.
@@ -5152,6 +5162,27 @@ export default function App() {
                           onChange={(e) => setSettingsReferenceDate(e.target.value)}
                           className="text-xs border border-slate-200 dark:border-zinc-700 rounded-lg p-2 w-full sm:w-64 bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 outline-hidden focus:border-red-500 font-mono text-center font-semibold"
                         />
+                      </div>
+
+                      {/* Row: Skala Tampilan (UI) — per-perangkat, mengatasi beda skala layar tiap laptop */}
+                      <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-semibold text-slate-800 dark:text-zinc-100">Skala Tampilan (UI)</span>
+                          <p className="text-[11px] text-slate-500 dark:text-zinc-400">Sesuaikan besar-kecil tampilan untuk layar Anda. Tersimpan di perangkat ini saja.</p>
+                        </div>
+                        <select
+                          value={settingsUiScale}
+                          onChange={(e) => setSettingsUiScale(parseFloat(e.target.value))}
+                          className="text-xs border border-slate-200 dark:border-zinc-700 rounded-lg p-2 w-full sm:w-64 bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 outline-hidden focus:border-red-500 font-semibold"
+                        >
+                          <option value="0.75">75% (Sangat ringkas)</option>
+                          <option value="0.8">80% (Ringkas)</option>
+                          <option value="0.85">85%</option>
+                          <option value="0.9">90% (Disarankan)</option>
+                          <option value="0.95">95%</option>
+                          <option value="1">100% (Normal)</option>
+                          <option value="1.1">110% (Besar)</option>
+                        </select>
                       </div>
 
                       {/* Excel Columns Config */}

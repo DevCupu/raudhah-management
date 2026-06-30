@@ -3,13 +3,9 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ──────────────────────────────────────────────────────────────
-   Skala global UI. Kecilkan jika tampilan terasa terlalu besar/zoom.
-   1 = 100% (normal). 0.9 = 90% (lebih ringkas). Ubah HANYA angka ini.
-   ────────────────────────────────────────────────────────────── */
-html {
-  zoom: 0.9;
-}
+/* Skala UI (html zoom) diatur per-perangkat via JS:
+   - awal: skrip inline di index.html (anti-kedip)
+   - runtime: pengaturan "Skala Tampilan" di Settings (localStorage: raudhah_ui_scale) */
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;

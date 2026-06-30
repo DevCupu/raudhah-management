@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/logo.png" />
     <title>Raudhah Manager</title>
+    <script>
+      // Terapkan skala UI per-perangkat (tersimpan di localStorage) sebelum render,
+      // agar tidak ada kedip dan setiap laptop bisa punya skala sendiri. Default 0.9.
+      (function () {
+        try {
+          var s = parseFloat(localStorage.getItem('raudhah_ui_scale'));
+          document.documentElement.style.zoom = (!isNaN(s) && s > 0) ? String(s) : '0.9';
+        } catch (e) {
+          document.documentElement.style.zoom = '0.9';
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div> 
