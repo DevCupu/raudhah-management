@@ -3,6 +3,14 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ──────────────────────────────────────────────────────────────
+   Skala global UI. Kecilkan jika tampilan terasa terlalu besar/zoom.
+   1 = 100% (normal). 0.9 = 90% (lebih ringkas). Ubah HANYA angka ini.
+   ────────────────────────────────────────────────────────────── */
+html {
+  zoom: 0.9;
+}
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
