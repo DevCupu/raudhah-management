@@ -15,6 +15,15 @@ import { PriorityInfo, PriorityLevel } from '../types';
  * - Days remaining > 4: Low Priority (🟢 Rendah)
  */
 export function getPriorityInfo(entryMadinahDateStr: string, referenceDateStr?: string): PriorityInfo {
+  if (!entryMadinahDateStr) {
+    return {
+      level: 'Belum Ada',
+      daysRemaining: NaN,
+      badgeColor: 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-750',
+      dotColor: 'bg-slate-400',
+    };
+  }
+
   // Use referenceDateStr if provided, otherwise default to current local system time
   const today = referenceDateStr ? new Date(referenceDateStr) : new Date();
   today.setHours(0, 0, 0, 0);
@@ -24,6 +33,15 @@ export function getPriorityInfo(entryMadinahDateStr: string, referenceDateStr?: 
 
   const diffTime = entryDate.getTime() - today.getTime();
   const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (isNaN(daysRemaining)) {
+    return {
+      level: 'Belum Ada',
+      daysRemaining: NaN,
+      badgeColor: 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-750',
+      dotColor: 'bg-slate-400',
+    };
+  }
 
   if (daysRemaining <= 1) {
     return {
@@ -50,7 +68,7 @@ export function getPriorityInfo(entryMadinahDateStr: string, referenceDateStr?: 
 }
 
 /**
- * Custom sorter: sorts 'Tinggi' first, then 'Sedang', then 'Rendah'.
+ * Custom sorter: sorts 'Tinggi' first, then 'Sedang', then 'Rendah', and 'Belum Ada' at the end.
  * In case of tie, sorts by closest entryMadinah date.
  */
 export function sortJamaahByPriorityAndDate(
@@ -61,11 +79,18 @@ export function sortJamaahByPriorityAndDate(
   const pA = getPriorityInfo(a.entryMadinah, referenceDateStr);
   const pB = getPriorityInfo(b.entryMadinah, referenceDateStr);
   
-  const priorityWeight = { 'Tinggi': 3, 'Sedang': 2, 'Rendah': 1 };
+  const priorityWeight = { 'Tinggi': 4, 'Sedang': 3, 'Rendah': 2, 'Belum Ada': 1 };
   const diff = priorityWeight[pB.level] - priorityWeight[pA.level];
   if (diff !== 0) return diff;
   
-  // Tie-breaker: earlier entry date comes first
-  return new Date(a.entryMadinah).getTime() - new Date(b.entryMadinah).getTime();
+  // Tie-breaker: earlier entry date comes first (if both are invalid, they are equal)
+  const timeA = new Date(a.entryMadinah).getTime();
+  const timeB = new Date(b.entryMadinah).getTime();
+  const validA = !isNaN(timeA);
+  const validB = !isNaN(timeB);
+  if (!validA && !validB) return 0;
+  if (!validA) return 1; // puts empty dates at the end
+  if (!validB) return -1;
+  return timeA - timeB;
 }
 

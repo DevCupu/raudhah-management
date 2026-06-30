@@ -37,7 +37,7 @@ export interface Operator {
   isActive: boolean;
 }
 
-export type PriorityLevel = 'Tinggi' | 'Sedang' | 'Rendah';
+export type PriorityLevel = 'Tinggi' | 'Sedang' | 'Rendah' | 'Belum Ada';
 
 export interface PriorityInfo {
   level: PriorityLevel;

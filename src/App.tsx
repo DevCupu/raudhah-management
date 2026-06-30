@@ -386,12 +386,13 @@ export default function App() {
     duplicate: 0,
     incomplete: 0,
   });
-  const [importDuplicateAction, setImportDuplicateAction] = useState<'skip' | 'overwrite'>('skip');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Settings states ---
   const [settingsTravelName, setSettingsTravelName] = useState(() => {
-    return localStorage.getItem('raudhah_travel_name') || 'Raudhah Al-Haramain Travel';
+    const saved = localStorage.getItem('raudhah_travel_name');
+    return saved !== null ? saved : 'Raudhah Al-Haramain Travel';
   });
   const [settingsNusukLimit, setSettingsNusukLimit] = useState(() => {
     const saved = localStorage.getItem('raudhah_nusuk_limit');
@@ -1340,7 +1341,7 @@ export default function App() {
       qrCodeUrl: null,
       qrUploadedAt: null,
       createdAt: new Date().toISOString(),
-      travel: newJamaah.travel || 'Raudhah Al-Haramain Travel',
+      travel: newJamaah.travel || settingsTravelName,
       email: newJamaah.email || '',
       password: generatedPassword,
       raudhahSlot: newJamaah.raudhahSlot || null,
@@ -1795,7 +1796,7 @@ export default function App() {
       { key: 'email', label: 'Email', getValue: (j: Jamaah) => j.email || '-', width: 28 },
       { key: 'entryMadinah', label: 'Tanggal Masuk Madinah', getValue: (j: Jamaah) => (j.entryMadinah || '').replace('T', ' '), width: 22 },
       { key: 'exitMadinah', label: 'Tanggal Keluar Madinah', getValue: (j: Jamaah) => j.exitMadinah || '', width: 20 },
-      { key: 'travel', label: 'Nama Travel / Rombongan', getValue: (j: Jamaah) => j.travel || 'Raudhah Al-Haramain Travel', width: 26 },
+      { key: 'travel', label: 'Nama Travel / Rombongan', getValue: (j: Jamaah) => j.travel || settingsTravelName, width: 26 },
       { key: 'password', label: 'Password Akses Jemaah', getValue: (j: Jamaah) => j.password || '', width: 18 },
       { key: 'status', label: 'Status Booking', getValue: (j: Jamaah) => j.status, width: 16 },
       { 
@@ -1976,11 +1977,12 @@ export default function App() {
           if (entryMadinah === 'undefined') entryMadinah = '';
           if (exitMadinah === 'undefined') exitMadinah = '';
 
-          // Read Travel column. If empty or missing, fallback to Raudhah Al-Haramain Travel
-          let travel = 'Raudhah Al-Haramain Travel';
+          // Read Travel column. If empty or missing, fallback to settingsTravelName
+          let travel = settingsTravelName;
           if (colTravelIdx !== -1 && r[colTravelIdx]) {
             travel = String(r[colTravelIdx]).trim();
           }
+          travel = travel.toUpperCase().trim();
 
           // Read Email column. Jika kosong, BUAT OTOMATIS dari nama:
           // huruf kecil semua, tanpa spasi/simbol, + @mailnesia.com
@@ -2088,10 +2090,14 @@ export default function App() {
 
   // Ganti nama travel/rombongan untuk semua baris preview dalam satu grup (sebelum import).
   const renamePreviewTravel = (oldName: string, newNameRaw: string) => {
-    const newName = newNameRaw.trim();
-    if (!newName || newName === oldName) return;
+    const newName = newNameRaw.trim().toUpperCase();
+    const oldNameUpper = oldName.trim().toUpperCase();
+    if (newName === oldNameUpper) return;
     setPreviewRows(prev =>
-      prev.map(r => ((r.travel || 'Raudhah Al-Haramain Travel') === oldName ? { ...r, travel: newName } : r))
+      prev.map(r => {
+        const currentTravel = (r.travel || settingsTravelName || '').trim().toUpperCase();
+        return currentTravel === oldNameUpper ? { ...r, travel: newName } : r;
+      })
     );
   };
 
@@ -2106,25 +2112,23 @@ export default function App() {
   }, [previewRows]);
 
   const executeImport = (specificTravel?: string) => {
-    const allowedStatuses = importDuplicateAction === 'overwrite' ? ['Valid', 'Duplikat'] : ['Valid'];
-    const rowsToImport = previewRows.filter(r => allowedStatuses.includes(r.status) && (!specificTravel || r.travel === specificTravel));
+    // Only import 'Valid' rows. 'Duplikat' and 'Tidak Lengkap' rows are strictly BLOCKED.
+    const rowsToImport = previewRows.filter(r => r.status === 'Valid' && (!specificTravel || r.travel === specificTravel));
     
     if (rowsToImport.length === 0) {
-      alert(specificTravel ? `Tidak ada data untuk travel "${specificTravel}" yang sesuai kriteria.` : 'Tidak ada data yang dapat di-import.');
+      alert(specificTravel ? `Tidak ada data baru/valid untuk travel "${specificTravel}" yang dapat di-import.` : 'Tidak ada data baru/valid yang dapat di-import.');
       return;
     }
 
-    let overwriteCount = 0;
     let newCount = 0;
 
     setJamaahs(prev => {
       let updated = [...prev];
       rowsToImport.forEach((r, index) => {
         const generatedPassword = r.password || Math.floor(100000 + Math.random() * 900000).toString();
-        const existingIndex = updated.findIndex(j => j.passport === r.passport || j.visa === r.visa);
         
         const importedItem: Jamaah = {
-          id: existingIndex !== -1 ? updated[existingIndex].id : ('jam-imported-' + Date.now() + index),
+          id: 'jam-imported-' + Date.now() + index,
           name: r.name,
           passport: r.passport.toUpperCase(),
           visa: r.visa,
@@ -2133,30 +2137,20 @@ export default function App() {
           email: r.email || '',
           entryMadinah: r.entryMadinah,
           exitMadinah: r.exitMadinah,
-          operatorId: existingIndex !== -1 ? updated[existingIndex].operatorId : null,
-          status: existingIndex !== -1 ? updated[existingIndex].status : ('Ready' as JamaahStatus),
-          notes: existingIndex !== -1 
-            ? `${updated[existingIndex].notes || ''} (Di-update via Excel ${r.travel}).`
-            : `Di-import via Excel (${r.travel}).`,
-          qrCodeUrl: existingIndex !== -1 ? updated[existingIndex].qrCodeUrl : null,
-          qrUploadedAt: existingIndex !== -1 ? updated[existingIndex].qrUploadedAt : null,
-          createdAt: existingIndex !== -1 ? updated[existingIndex].createdAt : new Date().toISOString(),
-          travel: r.travel || 'Raudhah Al-Haramain Travel',
+          operatorId: null,
+          status: 'Ready' as JamaahStatus,
+          notes: `Di-import via Excel (${r.travel}).`,
+          qrCodeUrl: null,
+          qrUploadedAt: null,
+          createdAt: new Date().toISOString(),
+          travel: r.travel || settingsTravelName,
           password: generatedPassword,
-          raudhahSlot: existingIndex !== -1 ? updated[existingIndex].raudhahSlot : (settingsDefaultRaudhahSlot || null),
-          customValues: {
-            ...(existingIndex !== -1 ? updated[existingIndex].customValues : {}),
-            ...(r.customValues || {})
-          }
+          raudhahSlot: settingsDefaultRaudhahSlot || null,
+          customValues: r.customValues || {}
         };
 
-        if (existingIndex !== -1) {
-          updated[existingIndex] = importedItem;
-          overwriteCount++;
-        } else {
-          updated.unshift(importedItem);
-          newCount++;
-        }
+        updated.unshift(importedItem);
+        newCount++;
       });
       return updated;
     });
@@ -2164,9 +2158,8 @@ export default function App() {
     const finalImportedList: Jamaah[] = [];
     rowsToImport.forEach((r, index) => {
       const generatedPassword = r.password || Math.floor(100000 + Math.random() * 900000).toString();
-      const existing = jamaahs.find(j => j.passport === r.passport || j.visa === r.visa);
       const importedItem: Jamaah = {
-        id: existing ? existing.id : ('jam-imported-' + Date.now() + index),
+        id: 'jam-imported-' + Date.now() + index,
         name: r.name,
         passport: r.passport.toUpperCase(),
         visa: r.visa,
@@ -2175,33 +2168,30 @@ export default function App() {
         email: r.email || '',
         entryMadinah: r.entryMadinah,
         exitMadinah: r.exitMadinah,
-        operatorId: existing ? existing.operatorId : null,
-        status: existing ? existing.status : ('Ready' as JamaahStatus),
-        notes: existing 
-          ? `${existing.notes || ''} (Di-update via Excel ${r.travel}).`
-          : `Di-import via Excel (${r.travel}).`,
-        qrCodeUrl: existing ? existing.qrCodeUrl : null,
-        qrUploadedAt: existing ? existing.qrUploadedAt : null,
-        createdAt: existing ? existing.createdAt : new Date().toISOString(),
-        travel: r.travel || 'Raudhah Al-Haramain Travel',
+        operatorId: null,
+        status: 'Ready' as JamaahStatus,
+        notes: `Di-import via Excel (${r.travel}).`,
+        qrCodeUrl: null,
+        qrUploadedAt: null,
+        createdAt: new Date().toISOString(),
+        travel: r.travel || settingsTravelName,
         password: generatedPassword,
-        raudhahSlot: existing ? existing.raudhahSlot : (settingsDefaultRaudhahSlot || null),
-        customValues: {
-          ...(existing ? existing.customValues : {}),
-          ...(r.customValues || {})
-        }
+        raudhahSlot: settingsDefaultRaudhahSlot || null,
+        customValues: r.customValues || {}
       };
       finalImportedList.push(importedItem);
     });
 
     const supabase = getSupabase();
-    if (supabase && isSupabaseConnected) {
-      supabase.from('jamaahs').upsert(finalImportedList.map(mapJamaahToDb)).then(({ error }) => {
-        if (error) console.error('Failed to upsert imported jamaahs to Supabase:', error);
+    if (supabase && isSupabaseConnected && finalImportedList.length > 0) {
+      supabase.from('jamaahs').insert(finalImportedList.map(mapJamaahToDb)).then(({ error }) => {
+        if (error) console.error('Failed to insert imported jamaahs in Supabase:', error);
       });
     }
 
-    alert(`Proses impor selesai!\n- Data Baru: ${newCount}\n- Data Diperbarui: ${overwriteCount}`);
+    saveJamaahsToDB([...finalImportedList, ...jamaahs]);
+
+    alert(`Berhasil mengimpor ${newCount} jemaah baru. Data duplikat otomatis dilewati.`);
     
     // Clear preview rows that were imported
     const remainingRows = previewRows.filter(r => !rowsToImport.includes(r));
@@ -2732,67 +2722,73 @@ export default function App() {
     let duplicateCount = 0;
     let newCount = 0;
 
-    const updated = [...jamaahs];
     const newItems: Jamaah[] = [];
 
     deduped.forEach((r, index) => {
-      const passport = (r.passport || '').toUpperCase();
-      const generatedPassword = Math.floor(100000 + Math.random() * 900000).toString();
-      const existingIndex = updated.findIndex(j => j.passport === passport);
+      const passport = (r.passport || '').toUpperCase().trim();
+      const visa = (r.visa || '').trim();
+      const isDuplicate = jamaahs.some(
+        j => j.passport.toLowerCase() === passport.toLowerCase() ||
+             (visa && j.visa.toLowerCase() === visa.toLowerCase())
+      );
+
+      if (isDuplicate) {
+        duplicateCount++;
+        return; // SKIP duplicate completely!
+      }
+
+      const generatedPassword = settingsDefaultPassword || Math.floor(100000 + Math.random() * 900000).toString();
+
+      let email = '';
+      const name = r.name || 'Jemaah Tanpa Nama';
+      const slug = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (slug) {
+        email = `${slug}@mailnesia.com`;
+      }
 
       const newItem: Jamaah = {
-        id: existingIndex !== -1
-          ? updated[existingIndex].id
-          : ('jam-scan-' + batchTimestamp + '-' + index + '-' + passport.slice(-4)),
-        name: r.name || 'Jemaah Tanpa Nama',
+        id: 'jam-scan-' + batchTimestamp + '-' + index + '-' + passport.slice(-4),
+        name: name,
         passport,
-        visa: r.visa || '',
+        visa: visa,
         gender: (r.gender === 'Laki-laki' || r.gender === 'Perempuan') ? r.gender : 'Laki-laki',
         phone: '-',
-        email: '',
-        // Tanggal sengaja DIKOSONGKAN untuk jemaah baru (diisi manual oleh user).
-        // Jemaah lama yang di-update tetap mempertahankan tanggalnya.
-        entryMadinah: existingIndex !== -1 ? updated[existingIndex].entryMadinah : '',
-        exitMadinah: existingIndex !== -1 ? updated[existingIndex].exitMadinah : '',
-        operatorId: existingIndex !== -1 ? updated[existingIndex].operatorId : null,
-        status: existingIndex !== -1 ? updated[existingIndex].status : 'Ready',
-        notes: existingIndex !== -1
-          ? `${updated[existingIndex].notes || ''} (Di-update via Scan Massal PDF).`
-          : `Di-import via Scan Massal Visa (${r.fileName}).`,
-        qrCodeUrl: existingIndex !== -1 ? updated[existingIndex].qrCodeUrl : null,
-        qrUploadedAt: existingIndex !== -1 ? updated[existingIndex].qrUploadedAt : null,
-        createdAt: existingIndex !== -1 ? updated[existingIndex].createdAt : new Date().toISOString(),
-        travel: r.travel || 'Raudhah Al-Haramain Travel',
+        email: email,
+        entryMadinah: '',
+        exitMadinah: '',
+        operatorId: null,
+        status: 'Ready',
+        notes: `Di-import via Scan Massal Visa (${r.fileName}).`,
+        qrCodeUrl: null,
+        qrUploadedAt: null,
+        createdAt: new Date().toISOString(),
+        travel: r.travel || settingsTravelName,
         password: generatedPassword,
         customValues: r.customValues || {}
       };
 
-      if (existingIndex !== -1) {
-        updated[existingIndex] = newItem;
-        duplicateCount++;
-      } else {
-        newItems.push(newItem);
-        newCount++;
-      }
+      newItems.push(newItem);
+      newCount++;
     });
 
-    const finalList = [...newItems, ...updated];
+    if (newItems.length > 0) {
+      const finalList = [...newItems, ...jamaahs];
+      // Update state
+      setJamaahs(finalList);
 
-    // Update state
-    setJamaahs(finalList);
+      // Save to IndexedDB
+      saveJamaahsToDB(finalList);
 
-    // Save to IndexedDB
-    saveJamaahsToDB(finalList);
-
-    // Save to Supabase
-    const supabase = getSupabase();
-    if (supabase && isSupabaseConnected) {
-      supabase.from('jamaahs').upsert(finalList.map(mapJamaahToDb)).then(({ error }) => {
-        if (error) console.error('Failed to upsert scanned jamaahs to Supabase:', error);
-      });
+      // Save to Supabase
+      const supabase = getSupabase();
+      if (supabase && isSupabaseConnected) {
+        supabase.from('jamaahs').insert(newItems.map(mapJamaahToDb)).then(({ error }) => {
+          if (error) console.error('Failed to insert scanned jamaahs to Supabase:', error);
+        });
+      }
     }
 
-    alert(`Sukses mengimpor jemaah dari berkas visa!\n- Jemaah Baru: ${newCount}\n- Jemaah Diperbarui: ${duplicateCount}`);
+    alert(`Sukses mengimpor jemaah dari berkas visa!\n- Jemaah Baru Berhasil Masuk: ${newCount}\n- Data Duplikat Ditolak (Skip): ${duplicateCount}`);
     
     // Reset batch state
     setShowBatchScanModal(false);
@@ -2964,7 +2960,7 @@ export default function App() {
     if (!newName || newName === oldName) return;
 
     const updatedList = jamaahs.map(j => {
-      const current = j.travel || 'Raudhah Al-Haramain Travel';
+      const current = j.travel || settingsTravelName;
       if (current === oldName) {
         const updated = { ...j, travel: newName };
         if (selectedJamaah && selectedJamaah.id === j.id) setSelectedJamaah(updated);
@@ -3851,7 +3847,7 @@ export default function App() {
                       className="w-full text-xs border border-slate-200 dark:border-zinc-600 rounded-md py-1.5 px-2 bg-white dark:bg-zinc-700 text-slate-700 dark:text-zinc-200"
                     >
                       <option value="All">Semua Travel</option>
-                      {Array.from(new Set(jamaahs.map(j => j.travel || 'Raudhah Al-Haramain Travel'))).filter(Boolean).map(trv => (
+                      {Array.from(new Set(jamaahs.map(j => j.travel || settingsTravelName))).filter(Boolean).map(trv => (
                         <option key={trv} value={trv}>{trv}</option>
                       ))}
                     </select>
@@ -3883,6 +3879,7 @@ export default function App() {
                       <option value="Tinggi">Tinggi</option>
                       <option value="Sedang">Sedang</option>
                       <option value="Rendah">Rendah</option>
+                      <option value="Belum Ada">Belum Ada</option>
                     </select>
                   </div>
 
@@ -3945,7 +3942,7 @@ export default function App() {
                 const pageJamaah = sortedFilteredJamaah.slice(pageStart, pageEnd);
 
                 const jamaahsByTravel = pageJamaah.reduce((acc: { [key: string]: Jamaah[] }, j) => {
-                  const travelName = j.travel || 'Raudhah Al-Haramain Travel';
+                  const travelName = j.travel || settingsTravelName;
                   if (!acc[travelName]) acc[travelName] = [];
                   acc[travelName].push(j);
                   return acc;
@@ -4147,7 +4144,7 @@ export default function App() {
                               <div className="overflow-x-auto">
                                 <table className="w-full text-left border-collapse text-xs">
                                   <thead>
-                                    <tr className="bg-slate-50 dark:bg-zinc-800/50 border-b border-slate-100 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 font-medium select-none">
+                                    <tr className="bg-slate-50 dark:bg-zinc-800/50 border-b border-slate-100 dark:border-zinc-700 text-slate-500 dark:text-zinc-400 font-medium select-none text-xs">
                                       <th className="py-2.5 px-2 text-center w-8">
                                         <input
                                           type="checkbox"
@@ -4213,10 +4210,10 @@ export default function App() {
                                             />
                                           </td>
                                           <td className="py-2.5 px-2">
-                                            <div className="font-semibold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5 truncate text-xs">
+                                            <div className="font-semibold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5 truncate text-sm">
                                                <span className="truncate">{j.name}</span>
                                                {j.gender && (
-                                                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border shrink-0 leading-none ${
+                                                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold border shrink-0 leading-none ${
                                                    j.gender === 'Perempuan'
                                                      ? 'bg-pink-50 dark:bg-pink-500/15 text-pink-700 dark:text-pink-300 border-pink-200 dark:border-pink-500/30'
                                                      : 'bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30'
@@ -4236,7 +4233,7 @@ export default function App() {
                                                  </button>
                                                )}
                                                {isUrgent && (
-                                                 <span className="text-[8px] text-rose-800 dark:text-rose-300 bg-rose-100 dark:bg-rose-500/15 border border-rose-200 dark:border-rose-500/25 px-1.5 py-0.5 rounded font-bold animate-pulse flex items-center gap-0.5 shrink-0 leading-none">
+                                                 <span className="text-[8px] text-rose-800 dark:text-rose-300 bg-rose-100 dark:bg-rose-500/15 border border-rose-200/50 dark:border-rose-500/25 px-1.5 py-0.5 rounded font-bold animate-pulse flex items-center gap-0.5 shrink-0 leading-none">
                                                    <AlertTriangle className="w-2.5 h-2.5 text-rose-600 shrink-0" />
                                                    <span>&lt;1 Jam!</span>
                                                  </span>
@@ -4246,55 +4243,55 @@ export default function App() {
                                           </td>
                                           <td className="py-2.5 px-2">
                                             {j.email ? (
-                                              <span className="font-mono text-[10px] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-200/60 dark:border-blue-500/20 inline-block truncate w-full align-middle leading-tight">{j.email}</span>
+                                              <span className="font-mono text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-200/60 dark:border-blue-500/20 inline-block truncate w-full align-middle leading-tight">{j.email}</span>
                                             ) : (
-                                              <span className="text-[10px] text-slate-400 italic">-</span>
+                                              <span className="text-xs text-slate-400 italic">-</span>
                                             )}
                                           </td>
                                           <td className="py-2.5 px-2">
-                                            <span className="font-mono font-bold text-slate-800 dark:text-zinc-100 text-[10px] bg-slate-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-600 inline-block truncate w-full align-middle leading-tight">{j.passport}</span>
+                                            <span className="font-mono font-bold text-slate-800 dark:text-zinc-100 text-xs bg-slate-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-600 inline-block truncate w-full align-middle leading-tight">{j.passport}</span>
                                           </td>
                                           <td className="py-2.5 px-2">
-                                            <span className="font-mono font-medium text-slate-700 dark:text-zinc-200 text-[10px] bg-slate-50 dark:bg-zinc-800/50 px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-600/50 inline-block truncate w-full align-middle leading-tight">{j.visa}</span>
+                                            <span className="font-mono font-medium text-slate-700 dark:text-zinc-200 text-xs bg-slate-50 dark:bg-zinc-800/50 px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-600/50 inline-block truncate w-full align-middle leading-tight">{j.visa}</span>
                                           </td>
                                           <td className="py-2.5 px-2">
-                                            <span className="font-mono text-[10px] font-semibold bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded border border-dashed border-amber-200 dark:border-amber-500/30 inline-flex items-center gap-1 truncate w-full align-middle leading-tight">
-                                              <Key className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                            <span className="font-mono text-xs font-semibold bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded border border-dashed border-amber-200 dark:border-amber-500/30 inline-flex items-center gap-1 truncate w-full align-middle leading-tight">
+                                              <Key className="w-3 h-3 text-amber-600 shrink-0" />
                                               <span className="truncate">{j.password || '123456'}</span>
                                             </span>
                                           </td>
                                           <td className="py-2.5 px-2 align-top">
-                                            <div className="text-[10px] font-medium text-slate-700 dark:text-zinc-200 leading-tight">{formatDateLabel(j.entryMadinah)}</div>
+                                            <div className="text-xs font-medium text-slate-700 dark:text-zinc-200 leading-tight">{formatDateLabel(j.entryMadinah)}</div>
                                             {j.raudhahSlot ? (() => {
                                               const r = getQrReminder(j.raudhahSlot, j.status, now.getTime(), settingsQrLeadHours);
                                               if (!r) return null;
                                               return (
                                                 <div className="mt-1 space-y-0.5">
-                                                  <div className="text-[9px] font-bold text-sky-800 dark:text-sky-300 bg-sky-50 dark:bg-sky-900/15 border border-sky-200 dark:border-sky-900/40 rounded px-1 py-0.5 inline-flex items-center gap-0.5 select-none leading-tight">
-                                                    <Download className="w-2.5 h-2.5 text-sky-600 shrink-0" />
+                                                  <div className="text-[10px] font-bold text-sky-800 dark:text-sky-300 bg-sky-50 dark:bg-sky-900/15 border border-sky-200 dark:border-sky-900/40 rounded px-1 py-0.5 inline-flex items-center gap-0.5 select-none leading-tight">
+                                                    <Download className="w-3 h-3 text-sky-600 shrink-0" />
                                                     <span className="truncate">{formatTimeColon(r.dist, TZ_WITA)}</span>
                                                   </div>
-                                                  <div className={`text-[9px] font-bold border rounded px-1 py-0.5 inline-flex items-center gap-0.5 select-none leading-tight ${QR_REMINDER_BADGE[r.tone]}`}>
-                                                    <Bell className="w-2.5 h-2.5 shrink-0" />
+                                                  <div className={`text-[10px] font-bold border rounded px-1 py-0.5 inline-flex items-center gap-0.5 select-none leading-tight ${QR_REMINDER_BADGE[r.tone]}`}>
+                                                    <Bell className="w-3 h-3 shrink-0" />
                                                     <span>{r.countdownLabel}</span>
                                                   </div>
-                                                  <div className="text-[9px] text-slate-500 dark:text-zinc-400 leading-tight truncate">
+                                                  <div className="text-[10px] text-slate-500 dark:text-zinc-400 leading-tight truncate">
                                                     Slot: {formatTimeColon(r.slot, TZ_WITA)}
                                                   </div>
                                                 </div>
                                               );
                                             })() : (
-                                              <div className="text-[10px] text-slate-400 italic leading-tight">-</div>
+                                              <div className="text-xs text-slate-400 italic leading-tight">-</div>
                                             )}
                                           </td>
                                           <td className="py-2.5 px-2">
-                                            <span className={`inline-flex items-center gap-1 border px-1.5 py-0.5 rounded-full text-[10px] font-medium ${prio.badgeColor}`}>
+                                            <span className={`inline-flex items-center gap-1 border px-1.5 py-0.5 rounded-full text-xs font-medium ${prio.badgeColor}`}>
                                               <span className={`w-1.5 h-1.5 rounded-full ${prio.dotColor}`}></span>
                                               {prio.level} (H{prio.daysRemaining >= 0 ? `-${prio.daysRemaining}` : `+${Math.abs(prio.daysRemaining)}`})
                                             </span>
                                           </td>
                                           <td className="py-2.5 px-2">
-                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase whitespace-nowrap ${
+                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold uppercase whitespace-nowrap ${
                                               j.status === 'Ready' ? 'bg-slate-100 dark:bg-zinc-700 text-slate-700 dark:text-zinc-200 border border-slate-200 dark:border-zinc-600/50' :
                                               j.status === 'Sedang War' ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-200/30 dark:border-amber-500/20' :
                                               j.status === 'QR Berhasil' ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-200/30 dark:border-emerald-500/20' :
@@ -4316,13 +4313,13 @@ export default function App() {
                                           </td>
                                           <td className="py-2.5 px-2 text-center">
                                             {j.qrCodeUrl ? (
-                                              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+                                              <span className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
                                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                                                 QR
                                               </span>
                                             ) : (
-                                              <span className="inline-flex items-center gap-1 text-[10px] text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 px-2 py-0.5 rounded-full font-bold animate-pulse whitespace-nowrap">
-                                                <AlertTriangle className="w-2.5 h-2.5 text-rose-600" />
+                                              <span className="inline-flex items-center gap-1 text-xs text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 px-2 py-0.5 rounded-full font-bold animate-pulse whitespace-nowrap">
+                                                <AlertTriangle className="w-3 h-3 text-rose-600" />
                                                 -
                                               </span>
                                             )}
@@ -4341,7 +4338,7 @@ export default function App() {
                                                     });
                                                   }
                                                 }}
-                                                className={`text-[10px] rounded border p-0.5 text-slate-700 dark:text-zinc-200 outline-none max-w-[110px] cursor-pointer font-semibold ${
+                                                className={`text-xs rounded border p-0.5 text-slate-700 dark:text-zinc-200 outline-none max-w-[110px] cursor-pointer font-semibold ${
                                                   !j.operatorId ? 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400' : 'bg-white dark:bg-zinc-700 border-slate-200 dark:border-zinc-600 text-slate-700 dark:text-zinc-200'
                                                 }`}
                                               >
@@ -4351,7 +4348,7 @@ export default function App() {
                                                 ))}
                                               </select>
                                             ) : (
-                                              <span className={`text-[10px] font-semibold ${!j.operatorId ? 'text-red-400' : 'text-zinc-200'}`}>
+                                              <span className={`text-xs font-semibold ${!j.operatorId ? 'text-red-400' : 'text-zinc-200'}`}>
                                                 {j.operatorId ? operators.find(o => o.id === j.operatorId)?.name || '-' : '-'}
                                               </span>
                                             )}
@@ -4363,7 +4360,7 @@ export default function App() {
                                                 title="Lihat Detail"
                                                 className="p-1 text-slate-600 dark:text-zinc-300 hover:text-slate-900 bg-slate-100 dark:bg-zinc-700 hover:bg-slate-200/80 rounded transition-all cursor-pointer"
                                               >
-                                                <Eye className="w-3 h-3" />
+                                                <Eye className="w-3.5 h-3.5" />
                                               </button>
                                               {activeOperatorId === null && (
                                                 <>
@@ -4372,14 +4369,14 @@ export default function App() {
                                                     title="Edit Data"
                                                     className="p-1 text-red-600 dark:text-red-400 hover:text-red-900 bg-red-50 dark:bg-red-500/10 hover:bg-red-100/80 dark:hover:bg-red-500/20 rounded transition-all cursor-pointer"
                                                   >
-                                                    <Edit className="w-3 h-3" />
+                                                    <Edit className="w-3.5 h-3.5" />
                                                   </button>
                                                   <button
                                                     onClick={() => handleDeleteJamaah(j.id)}
                                                     title="Hapus Data"
                                                     className="p-1 text-rose-600 dark:text-rose-400 hover:text-rose-950 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100/80 dark:hover:bg-rose-500/20 rounded transition-all cursor-pointer"
                                                   >
-                                                    <Trash2 className="w-3 h-3" />
+                                                    <Trash2 className="w-3.5 h-3.5" />
                                                   </button>
                                                 </>
                                               )}
@@ -4522,19 +4519,6 @@ export default function App() {
                         <h3 className="font-bold text-slate-800 dark:text-zinc-100 text-sm">Pratinjau Unggahan Excel (Terbagi per Rombongan)</h3>
                         <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">Sistem mengelompokkan jamaah otomatis berdasarkan kolom "Grup" di file Excel Anda.</p>
                       </div>
-
-                      {/* Action for Duplicate Data */}
-                      <div className="flex items-center gap-2 bg-slate-50 dark:bg-zinc-800/50 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-600/60 text-xs">
-                        <span className="text-slate-600 dark:text-zinc-300 font-medium">Jika data Duplikat:</span>
-                        <select
-                          value={importDuplicateAction}
-                          onChange={(e) => setImportDuplicateAction(e.target.value as 'skip' | 'overwrite')}
-                          className="bg-white dark:bg-zinc-700 border border-slate-200 dark:border-zinc-600 rounded-md py-0.5 px-2 text-slate-700 dark:text-zinc-200 shadow-3xs outline-hidden focus:border-red-500 font-semibold"
-                        >
-                          <option value="skip">Abaikan (Skip)</option>
-                          <option value="overwrite">Perbarui (Overwrite)</option>
-                        </select>
-                      </div>
                     </div>
                     
                     <div className="flex items-center gap-2">
@@ -4550,7 +4534,7 @@ export default function App() {
                         className="px-4 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition-all shadow-xs cursor-pointer flex items-center gap-1"
                       >
                         <Check className="w-3.5 h-3.5" />
-                        <span>Impor Semua ({importDuplicateAction === 'overwrite' ? importStats.valid + importStats.duplicate : importStats.valid} Data)</span>
+                        <span>Impor Semua ({importStats.valid} Data)</span>
                       </button>
                     </div>
                   </div>
@@ -4579,7 +4563,7 @@ export default function App() {
                   <div className="space-y-6">
                     {Object.entries(
                       previewRows.reduce((acc: { [key: string]: any[] }, r) => {
-                        const trv = r.travel || 'Raudhah Al-Haramain Travel';
+                        const trv = r.travel || settingsTravelName;
                         if (!acc[trv]) acc[trv] = [];
                         acc[trv].push(r);
                         return acc;
@@ -4592,21 +4576,33 @@ export default function App() {
                           {/* Travel Header with Pax info and targeted import */}
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-slate-50 dark:bg-zinc-800/50 dark:bg-zinc-800/50 border-b border-slate-100 dark:border-zinc-700 gap-3">
                             <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-zinc-900 text-white font-bold flex items-center justify-center text-xs uppercase">
-                                {travelName.charAt(0)}
+                              <div className={`w-8 h-8 rounded-lg font-bold flex items-center justify-center text-xs uppercase ${
+                                !travelName.trim() ? 'bg-rose-600 text-white animate-pulse' : 'bg-zinc-900 text-white'
+                              }`}>
+                                {travelName ? travelName.charAt(0).toUpperCase() : '?'}
                               </div>
                               <div>
                                 <h4 className="font-bold text-slate-800 dark:text-zinc-100 text-sm flex items-center gap-2">
                                   <input
                                     defaultValue={travelName}
+                                    placeholder="KETIK NAMA AGEN TRAVEL DI SINI..."
                                     onBlur={(e) => renamePreviewTravel(travelName, e.target.value)}
                                     onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                                     title="Klik untuk mengubah nama travel/rombongan grup ini"
-                                    className="font-bold text-slate-800 dark:text-zinc-100 text-sm bg-transparent border border-transparent hover:border-slate-300 dark:hover:border-zinc-600 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-900 rounded px-1.5 py-0.5 outline-none transition-colors min-w-[220px]"
+                                    className={`font-bold text-sm bg-transparent border rounded px-2 py-0.5 outline-none transition-all min-w-[280px] ${
+                                      !travelName.trim()
+                                        ? 'border-dashed border-rose-400 dark:border-rose-700 bg-rose-50/20 dark:bg-rose-950/10 text-rose-600 placeholder:text-rose-400'
+                                        : 'border-transparent text-slate-800 dark:text-zinc-100 hover:border-slate-300 dark:hover:border-zinc-600 focus:border-blue-400 focus:bg-white dark:focus:bg-zinc-900'
+                                    }`}
                                   />
-                                  <span className="px-2 py-0.5 rounded bg-blue-50 text-red-700 border border-blue-100 text-[10px] font-semibold">
+                                  <span className="px-2 py-0.5 rounded bg-blue-50 text-red-700 border border-blue-100 text-[10px] font-semibold shrink-0">
                                     {rows.length} Pax
                                   </span>
+                                  {!travelName.trim() && (
+                                    <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-100 text-[9px] font-bold animate-pulse shrink-0">
+                                      ⚠️ NAMA TRAVEL KOSONG
+                                    </span>
+                                  )}
                                 </h4>
                                 <p className="text-[10px] text-slate-500 dark:text-zinc-400 mt-0.5">Rincian manifest travel ini ({validCount} Pax valid siap dimasukkan) — klik nama travel di atas untuk mengubahnya.</p>
                               </div>
@@ -4615,15 +4611,15 @@ export default function App() {
                             <div>
                               <button
                                 onClick={() => executeImport(travelName)}
-                                disabled={(importDuplicateAction === 'overwrite' ? validCount + rows.filter(r => r.status === 'Duplikat').length : validCount) === 0}
+                                disabled={validCount === 0}
                                 className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-all ${
-                                  (importDuplicateAction === 'overwrite' ? validCount + rows.filter(r => r.status === 'Duplikat').length : validCount) > 0 
+                                  validCount > 0 
                                     ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer' 
                                     : 'bg-slate-100 dark:bg-zinc-700 text-slate-400 cursor-not-allowed'
                                 }`}
                               >
                                 <Upload className="w-3.5 h-3.5" />
-                                <span>Impor Travel Ini Saja ({importDuplicateAction === 'overwrite' ? validCount + rows.filter(r => r.status === 'Duplikat').length : validCount} Pax)</span>
+                                <span>Impor Travel Ini Saja ({validCount} Pax)</span>
                               </button>
                             </div>
                           </div>
@@ -4982,7 +4978,7 @@ export default function App() {
                         <input
                           type="text"
                           value={settingsTravelName}
-                          onChange={(e) => setSettingsTravelName(e.target.value)}
+                          onChange={(e) => setSettingsTravelName(e.target.value.toUpperCase())}
                           className="text-xs border border-slate-200 dark:border-zinc-700 rounded-lg p-2 w-full sm:w-64 bg-white dark:bg-zinc-800 text-slate-800 dark:text-zinc-100 outline-hidden focus:border-red-500"
                         />
                       </div>
@@ -6504,7 +6500,7 @@ export default function App() {
                     required
                     placeholder="Contoh: An-Nahl Umrah & Haji, Al-Fatih Tour, dll."
                     value={newJamaah.travel || ''}
-                    onChange={(e) => setNewJamaah({ ...newJamaah, travel: e.target.value })}
+                    onChange={(e) => setNewJamaah({ ...newJamaah, travel: e.target.value.toUpperCase() })}
                     className="w-full text-xs border border-slate-200 dark:border-zinc-600 rounded-lg p-2.5 bg-slate-50 dark:bg-zinc-700/40 outline-hidden focus:border-red-500"
                   />
                 </div>
@@ -6768,7 +6764,7 @@ export default function App() {
                     required
                     placeholder="Contoh: Raudhah Al-Haramain Travel"
                     value={editingJamaah.travel || ''}
-                    onChange={(e) => setEditingJamaah({ ...editingJamaah, travel: e.target.value })}
+                    onChange={(e) => setEditingJamaah({ ...editingJamaah, travel: e.target.value.toUpperCase() })}
                     className="w-full text-xs border border-slate-200 dark:border-zinc-600 rounded-lg p-2.5 bg-slate-50 dark:bg-zinc-700/40 outline-hidden focus:border-red-500"
                   />
                 </div>
@@ -7202,6 +7198,86 @@ export default function App() {
                       </div>
                     </div>
                   )}
+
+                  {/* Step Tracker Card */}
+                  <div className="max-w-md mx-auto p-4 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700/60 text-left space-y-3 shadow-xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Tahapan Proses Saat Ini</span>
+                    
+                    <div className="space-y-3 text-xs">
+                      {/* Step 1: PDF Text Extraction */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border ${
+                            batchActiveFileProgress >= 55
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-900/40 dark:text-emerald-400'
+                              : 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-900/40 dark:text-blue-400'
+                          }`}>
+                            {batchActiveFileProgress >= 55 ? '✓' : '1'}
+                          </span>
+                          <span className={`${batchActiveFileProgress >= 55 ? 'line-through text-slate-400 dark:text-zinc-500' : 'font-semibold text-slate-800 dark:text-zinc-200'}`}>
+                            Mengekstrak Teks Digital dari PDF
+                          </span>
+                        </div>
+                        {batchActiveFileProgress < 55 && (
+                          <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+                        )}
+                      </div>
+
+                      {/* Step 2: Gemini AI Processing */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border ${
+                            batchActiveFileProgress >= 100
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-900/40 dark:text-emerald-400'
+                              : batchActiveFileProgress >= 55
+                              ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-900/40 dark:text-blue-400'
+                              : 'bg-slate-50 border-slate-200 text-slate-400 dark:bg-zinc-800 dark:border-zinc-700'
+                          }`}>
+                            {batchActiveFileProgress >= 100 ? '✓' : '2'}
+                          </span>
+                          <span className={`${
+                            batchActiveFileProgress >= 100
+                              ? 'line-through text-slate-400 dark:text-zinc-500'
+                              : batchActiveFileProgress >= 55
+                              ? 'font-semibold text-slate-800 dark:text-zinc-200'
+                              : 'text-slate-400 dark:text-zinc-500'
+                          }`}>
+                            Analisis &amp; Pemetaan Teks oleh Gemini AI
+                          </span>
+                        </div>
+                        {batchActiveFileProgress >= 55 && batchActiveFileProgress < 100 && (
+                          <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+                        )}
+                      </div>
+
+                      {/* Step 3: Verification & Duplicates Prevention */}
+                      <div className="flex items-center gap-2">
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border ${
+                          batchActiveFileProgress >= 100
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-900/40 dark:text-emerald-400'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 dark:bg-zinc-800 dark:border-zinc-700'
+                        }`}>
+                          {batchActiveFileProgress >= 100 ? '✓' : '3'}
+                        </span>
+                        <span className={`${batchActiveFileProgress >= 100 ? 'font-semibold text-slate-800 dark:text-zinc-200' : 'text-slate-400 dark:text-zinc-500'}`}>
+                          Proteksi Duplikat &amp; Validasi Data
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Visual Status Explanation Card */}
+                  <div className="max-w-md mx-auto p-4 rounded-xl bg-blue-50/50 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900/30 text-left text-xs space-y-2">
+                    <span className="font-bold text-blue-800 dark:text-blue-400 flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Informasi Pemrosesan AI
+                    </span>
+                    <ul className="list-disc pl-4 space-y-1 text-slate-600 dark:text-zinc-400 text-[11px] leading-relaxed">
+                      <li><strong>Gemini AI sedang bekerja:</strong> Membaca dokumen teks besar (seperti PDF multipage {batchScanFileMeta?.pages || ''} halaman) membutuhkan waktu sekitar 10-30 detik untuk diurai.</li>
+                      <li><strong>Status Cooldown/Rate-Limit:</strong> Jika Anda melihat teks status berubah ke <em>Rate limit terlampaui</em>, program akan otomatis menjeda sementara (cooldown) lalu melanjutkan memproses tanpa merusak atau menghilangkan data yang sudah terisi.</li>
+                      <li><strong>Tindakan Pengguna:</strong> Harap pertahankan halaman browser tetap terbuka dan jangan menutup atau merefresh dashboard selama pemindaian masih berjalan.</li>
+                    </ul>
+                  </div>
 
                   {/* Stopwatch Ticker */}
                   <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-zinc-400 pt-1">
